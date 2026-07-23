@@ -1,0 +1,106 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./masjidhub.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Mosque {
+  mosque_id    Int            @id @default(autoincrement())
+  name         String
+  slug         String         @unique
+  address      String?
+  phone        String?
+  email        String?
+  created_at   DateTime       @default(now())
+  
+  users         User[]
+  donations     Donation[]
+  announcements Announcement[]
+  programs      Program[]
+}
+
+model User {
+  user_id       Int            @id @default(autoincrement())
+  mosque_id     Int
+  name          String
+  email         String
+  password_hash String
+  role          String         // "admin" | "member"
+  phone         String?
+  created_at    DateTime       @default(now())
+
+  mosque        Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  announcements Announcement[]
+  registrations Registration[]
+  notifications Notification[]
+
+  @@unique([mosque_id, email])
+}
+
+model Donation {
+  donation_id Int      @id @default(autoincrement())
+  mosque_id   Int
+  user_id     Int?
+  amount      Float
+  category    String   // "Zakat" | "Sadaqah" | "Waqf" | "General"
+  method      String   // "Card" | "Transfer" | "Cash"
+  status      String   @default("Pending") // "Pending" | "Completed" | "Failed"
+  date        DateTime @default(now())
+
+  mosque      Mosque   @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+}
+
+model Announcement {
+  announcement_id Int       @id @default(autoincrement())
+  mosque_id       Int
+  admin_id        Int
+  title           String
+  content         String
+  category        String    // "General" | "Event" | "Prayer" | "Urgent"
+  posted_at       DateTime  @default(now())
+  expiry_date     DateTime?
+
+  mosque          Mosque    @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  admin           User      @relation(fields: [admin_id], references: [user_id], onDelete: Cascade)
+}
+
+model Program {
+  program_id   Int            @id @default(autoincrement())
+  mosque_id    Int
+  title        String
+  description  String
+  start_date   DateTime
+  end_date     DateTime
+  location     String
+  max_capacity Int            @default(0)
+
+  mosque       Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  registrations Registration[]
+}
+
+model Registration {
+  reg_id     Int      @id @default(autoincrement())
+  user_id    Int
+  program_id Int
+  reg_date   DateTime @default(now())
+  status     String   @default("Registered") // "Registered" | "Attended" | "Cancelled"
+
+  user       User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  program    Program  @relation(fields: [program_id], references: [program_id], onDelete: Cascade)
+
+  @@unique([user_id, program_id])
+}
+
+model Notification {
+  notif_id  Int      @id @default(autoincrement())
+  user_id   Int
+  message   String
+  type      String   // "Email" | "SMS" | "In-App"
+  is_read   Boolean  @default(false)
+  sent_at   DateTime @default(now())
+
+  user      User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}

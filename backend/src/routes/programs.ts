@@ -1,0 +1,137 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { tenantHook } from '../middleware/tenantHook.js';
+
+interface ProgramBody {
+  title: string;
+  description: string;
+  start_date: string; // ISO String
+  end_date: string;   // ISO String
+  location: string;
+  max_capacity?: number;
+}
+
+export default async function programRoutes(fastify: FastifyInstance) {
+  // Apply tenantHook as a preHandler for all routes in this plugin
+  fastify.addHook('preHandler', tenantHook);
+
+  // GET /api/programs - Public endpoint to retrieve scheduled programs for tenant
+  fastify.get('/api/programs', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const programs = await fastify.prisma.program.findMany({
+        where: { mosque_id: request.tenant.mosque_id },
+        orderBy: { start_date: 'asc' }
+      });
+      reply.send(programs);
+    } catch (err) {
+      fastify.log.error(err);
+      reply.status(500).send({ error: 'Failed to fetch programs list.' });
+    }
+  });
+
+  // POST /api/admin/programs - Create a new program (restricted to Mosque Admin)
+  fastify.post('/api/admin/programs', {
+    preHandler: [fastify.adminOnly]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { title, description, start_date, end_date, location, max_capacity } = request.body as ProgramBody;
+
+    if (!title || !description || !start_date || !end_date || !location) {
+      reply.status(400).send({ error: 'Title, description, start date, end date, and location are required.' });
+      return;
+    }
+
+    try {
+      const newProgram = await fastify.prisma.program.create({
+        data: {
+          mosque_id: request.tenant.mosque_id,
+          title,
+          description,
+          start_date: new Date(start_date),
+          end_date: new Date(end_date),
+          location,
+          max_capacity: max_capacity !== undefined ? max_capacity : 0 // 0 means unlimited
+        }
+      });
+      reply.status(201).send(newProgram);
+    } catch (err) {
+      fastify.log.error(err);
+      reply.status(500).send({ error: 'Failed to create program.' });
+    }
+  });
+
+  // PUT /api/admin/programs/:id - Update an existing program
+  fastify.put('/api/admin/programs/:id', {
+    preHandler: [fastify.adminOnly]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const { title, description, start_date, end_date, location, max_capacity } = request.body as ProgramBody;
+
+    try {
+      const programId = parseInt(id, 10);
+      if (isNaN(programId)) {
+        reply.status(400).send({ error: 'Invalid program ID.' });
+        return;
+      }
+
+      // Check existence and tenant boundary
+      const program = await fastify.prisma.program.findUnique({
+        where: { program_id: programId }
+      });
+
+      if (!program || program.mosque_id !== request.tenant.mosque_id) {
+        reply.status(404).send({ error: 'Program not found.' });
+        return;
+      }
+
+      const updated = await fastify.prisma.program.update({
+        where: { program_id: programId },
+        data: {
+          title: title ?? undefined,
+          description: description ?? undefined,
+          start_date: start_date ? new Date(start_date) : undefined,
+          end_date: end_date ? new Date(end_date) : undefined,
+          location: location ?? undefined,
+          max_capacity: max_capacity !== undefined ? max_capacity : undefined
+        }
+      });
+
+      reply.send(updated);
+    } catch (err) {
+      fastify.log.error(err);
+      reply.status(500).send({ error: 'Failed to update program.' });
+    }
+  });
+
+  // DELETE /api/admin/programs/:id - Delete a program
+  fastify.delete('/api/admin/programs/:id', {
+    preHandler: [fastify.adminOnly]
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const programId = parseInt(id, 10);
+      if (isNaN(programId)) {
+        reply.status(400).send({ error: 'Invalid program ID.' });
+        return;
+      }
+
+      // Check existence and tenant boundary
+      const program = await fastify.prisma.program.findUnique({
+        where: { program_id: programId }
+      });
+
+      if (!program || program.mosque_id !== request.tenant.mosque_id) {
+        reply.status(404).send({ error: 'Program not found.' });
+        return;
+      }
+
+      await fastify.prisma.program.delete({
+        where: { program_id: programId }
+      });
+
+      reply.send({ success: true, message: 'Program deleted successfully.' });
+    } catch (err) {
+      fastify.log.error(err);
+      reply.status(500).send({ error: 'Failed to delete program.' });
+    }
+  });
+}
