@@ -32,5 +32,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+
 # TypeScript
 *.tsbuildinfo
