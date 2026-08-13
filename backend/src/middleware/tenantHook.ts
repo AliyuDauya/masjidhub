@@ -1,31 +1,24 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { Mosque } from '@prisma/client';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    tenant: Mosque;
-  }
-}
 
 export async function tenantHook(request: FastifyRequest, reply: FastifyReply) {
-  // Extract slug from headers or params
-  const slug = (request.headers['x-mosque-slug'] as string) || (request.params as any)?.slug;
+  const header = request.headers['x-mosque-slug'];
+  const slug = (Array.isArray(header) ? header[0] : header) || (request.params as { slug?: string })?.slug;
 
   if (!slug) {
-    reply.status(400).send({ error: 'Missing X-Mosque-Slug tenant context header or route parameter.' });
+    reply.status(400).send({ error: 'Select a mosque using X-Mosque-Slug or the route slug.' });
     return;
   }
 
-  // Retrieve the mosque from the SQLite DB using shared Prisma client instance
   const mosque = await request.server.prisma.mosque.findUnique({
-    where: { slug }
+    where: { slug: slug.toLowerCase() }
   });
-
   if (!mosque) {
     reply.status(404).send({ error: `Mosque with slug "${slug}" not found.` });
     return;
   }
-
-  // Inject the validated tenant object into the request context
+  if (mosque.status !== 'Active') {
+    reply.status(423).send({ error: `This mosque is currently ${mosque.status.toLowerCase()}.` });
+    return;
+  }
   request.tenant = mosque;
 }

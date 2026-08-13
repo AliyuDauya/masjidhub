@@ -6,6 +6,9 @@ interface AnnouncementBody {
   content: string;
   category: 'General' | 'Event' | 'Prayer' | 'Urgent';
   expiry_date?: string; // ISO-8601 string
+  audience?: 'Public' | 'Members' | 'Staff';
+  status?: 'Draft' | 'Scheduled' | 'Published' | 'Archived';
+  publish_at?: string;
 }
 
 interface JWTPayload {
@@ -26,6 +29,9 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       const announcements = await fastify.prisma.announcement.findMany({
         where: {
           mosque_id: request.tenant.mosque_id,
+          status: 'Published',
+          audience: 'Public',
+          publish_at: { lte: now },
           OR: [
             { expiry_date: null },
             { expiry_date: { gt: now } }
@@ -42,9 +48,9 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // POST /api/admin/announcements - Create new announcement (restricted to Mosque Admin)
   fastify.post('/api/admin/announcements', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { title, content, category, expiry_date } = request.body as AnnouncementBody;
+    const { title, content, category, expiry_date, audience = 'Public', status = 'Published', publish_at } = request.body as AnnouncementBody;
     const payload = request.user as JWTPayload;
 
     if (!title || !content || !category) {
@@ -62,13 +68,17 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       const announcement = await fastify.prisma.announcement.create({
         data: {
           mosque_id: request.tenant.mosque_id,
-          admin_id: payload.user_id,
+          author_id: payload.user_id,
           title,
           content,
           category,
-          expiry_date: expiry_date ? new Date(expiry_date) : null
+          expiry_date: expiry_date ? new Date(expiry_date) : null,
+          audience,
+          status,
+          publish_at: publish_at ? new Date(publish_at) : new Date()
         }
       });
+      await fastify.audit(request, 'announcement.created', 'Announcement', announcement.announcement_id, `Announcement ${status.toLowerCase()}.`);
       reply.status(201).send(announcement);
     } catch (err) {
       fastify.log.error(err);
@@ -78,10 +88,10 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // PUT /api/admin/announcements/:id - Update announcement details
   fastify.put('/api/admin/announcements/:id', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
-    const { title, content, category, expiry_date } = request.body as AnnouncementBody;
+    const { title, content, category, expiry_date, audience, status, publish_at } = request.body as AnnouncementBody;
 
     try {
       const announcementId = parseInt(id, 10);
@@ -106,10 +116,14 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
           title: title ?? undefined,
           content: content ?? undefined,
           category: category ?? undefined,
-          expiry_date: expiry_date !== undefined ? (expiry_date ? new Date(expiry_date) : null) : undefined
+          expiry_date: expiry_date !== undefined ? (expiry_date ? new Date(expiry_date) : null) : undefined,
+          audience,
+          status,
+          publish_at: publish_at ? new Date(publish_at) : undefined
         }
       });
 
+      await fastify.audit(request, 'announcement.updated', 'Announcement', announcementId, 'Announcement updated.');
       reply.send(updated);
     } catch (err) {
       fastify.log.error(err);
@@ -119,7 +133,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/admin/announcements/:id - Delete announcement
   fastify.delete('/api/admin/announcements/:id', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
 
@@ -143,6 +157,8 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
       await fastify.prisma.announcement.delete({
         where: { announcement_id: announcementId }
       });
+
+      await fastify.audit(request, 'announcement.deleted', 'Announcement', announcementId, 'Announcement deleted.');
 
       reply.send({ success: true, message: 'Announcement deleted successfully.' });
     } catch (err) {

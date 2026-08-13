@@ -18,7 +18,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
   fastify.get('/api/programs', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const programs = await fastify.prisma.program.findMany({
-        where: { mosque_id: request.tenant.mosque_id },
+        where: { mosque_id: request.tenant.mosque_id, status: 'Published', visibility: 'Public' },
         orderBy: { start_date: 'asc' }
       });
       reply.send(programs);
@@ -30,7 +30,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
 
   // POST /api/admin/programs - Create a new program (restricted to Mosque Admin)
   fastify.post('/api/admin/programs', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { title, description, start_date, end_date, location, max_capacity } = request.body as ProgramBody;
 
@@ -51,6 +51,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
           max_capacity: max_capacity !== undefined ? max_capacity : 0 // 0 means unlimited
         }
       });
+      await fastify.audit(request, 'program.created', 'Program', newProgram.program_id, 'Programme created.');
       reply.status(201).send(newProgram);
     } catch (err) {
       fastify.log.error(err);
@@ -60,7 +61,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
 
   // PUT /api/admin/programs/:id - Update an existing program
   fastify.put('/api/admin/programs/:id', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const { title, description, start_date, end_date, location, max_capacity } = request.body as ProgramBody;
@@ -94,6 +95,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
         }
       });
 
+      await fastify.audit(request, 'program.updated', 'Program', programId, 'Programme updated.');
       reply.send(updated);
     } catch (err) {
       fastify.log.error(err);
@@ -103,7 +105,7 @@ export default async function programRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/admin/programs/:id - Delete a program
   fastify.delete('/api/admin/programs/:id', {
-    preHandler: [fastify.adminOnly]
+    preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
 
@@ -127,6 +129,8 @@ export default async function programRoutes(fastify: FastifyInstance) {
       await fastify.prisma.program.delete({
         where: { program_id: programId }
       });
+
+      await fastify.audit(request, 'program.deleted', 'Program', programId, 'Programme deleted.');
 
       reply.send({ success: true, message: 'Program deleted successfully.' });
     } catch (err) {

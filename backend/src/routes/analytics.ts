@@ -10,7 +10,7 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/analytics/donations', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const donations = await fastify.prisma.donation.findMany({
-        where: { mosque_id: request.tenant.mosque_id }
+        where: { mosque_id: request.tenant.mosque_id, status: 'Completed' }
       });
 
       let totalDonated = 0;
@@ -18,17 +18,18 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
       const byMethod: Record<string, number> = { Card: 0, Transfer: 0, Cash: 0 };
 
       donations.forEach((d) => {
-        totalDonated += d.amount;
+        const amount = d.amount_minor / 100;
+        totalDonated += amount;
         if (byCategory[d.category] !== undefined) {
-          byCategory[d.category] += d.amount;
+          byCategory[d.category] += amount;
         } else {
-          byCategory[d.category] = d.amount;
+          byCategory[d.category] = amount;
         }
 
         if (byMethod[d.method] !== undefined) {
-          byMethod[d.method] += d.amount;
+          byMethod[d.method] += amount;
         } else {
-          byMethod[d.method] = d.amount;
+          byMethod[d.method] = amount;
         }
       });
 

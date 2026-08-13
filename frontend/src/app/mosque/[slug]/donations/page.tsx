@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { api } from '@/lib/api';
 
 export default function MosqueDonations() {
   const params = useParams();
@@ -25,7 +26,7 @@ export default function MosqueDonations() {
   const [receiptDetails, setReceiptDetails] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleCheckout = (e: React.FormEvent) => {
+  const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -37,19 +38,19 @@ export default function MosqueDonations() {
 
     setIsProcessing(true);
 
-    // Simulate 2-second gateway processing lag
-    setTimeout(() => {
+    try {
+      const receipt = await api<any>(slug, '/api/donations', { method: 'POST', body: JSON.stringify({ amount: parsedAmount, category, method, currency: 'NGN' }) });
       setIsProcessing(false);
       setReceiptDetails({
-        receiptId: 'TXN-' + Math.floor(100000 + Math.random() * 900000),
-        amount: parsedAmount,
-        category,
-        method,
-        date: new Date().toLocaleString()
+        receiptId: receipt.receipt_number,
+        amount: receipt.amount,
+        category: receipt.category,
+        method: receipt.method,
+        date: new Date(receipt.date).toLocaleString()
       });
       setShowReceipt(true);
       setAmount('');
-    }, 2000);
+    } catch (error) { setIsProcessing(false); setErrorMsg(error instanceof Error ? error.message : 'Donation could not be recorded.'); }
   };
 
   return (

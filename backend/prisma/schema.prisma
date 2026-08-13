@@ -8,99 +8,182 @@ generator client {
 }
 
 model Mosque {
-  mosque_id    Int            @id @default(autoincrement())
-  name         String
-  slug         String         @unique
-  address      String?
-  phone        String?
-  email        String?
-  created_at   DateTime       @default(now())
-  
-  users         User[]
-  donations     Donation[]
-  announcements Announcement[]
-  programs      Program[]
+  mosque_id               Int            @id @default(autoincrement())
+  name                    String
+  slug                    String         @unique
+  status                  String         @default("Pending") // Pending | Active | Suspended
+  address                 String?
+  phone                   String?
+  email                   String?
+  timezone                String         @default("Africa/Lagos")
+  brand_color             String         @default("#087f5b")
+  logo_url                String?
+  notification_email      Boolean        @default(true)
+  notification_in_app     Boolean        @default(true)
+  created_at              DateTime       @default(now())
+  updated_at              DateTime       @updatedAt
+
+  memberships             Membership[]
+  donations               Donation[]
+  announcements           Announcement[]
+  programs                Program[]
+  registrations           Registration[]
+  notifications           Notification[]
+  audit_events            AuditEvent[]
+
+  @@unique([mosque_id, slug])
 }
 
 model User {
-  user_id       Int            @id @default(autoincrement())
-  mosque_id     Int
-  name          String
-  email         String
-  password_hash String
-  role          String         // "admin" | "member"
-  phone         String?
-  created_at    DateTime       @default(now())
+  user_id                  Int            @id @default(autoincrement())
+  name                     String
+  email                    String         @unique
+  password_hash            String
+  phone                    String?
+  account_status           String         @default("Active") // Active | Suspended
+  platform_role            String?        // super_admin
+  created_at               DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
 
-  mosque        Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
-  announcements Announcement[]
-  registrations Registration[]
-  notifications Notification[]
+  memberships             Membership[]
+  donations               Donation[]
+  registrations           Registration[]
+  notifications           Notification[]
+  authored_announcements   Announcement[]  @relation("AnnouncementAuthor")
+  audit_events             AuditEvent[]    @relation("AuditActor")
+}
 
-  @@unique([mosque_id, email])
+model Membership {
+  membership_id            Int            @id @default(autoincrement())
+  mosque_id                Int
+  user_id                  Int
+  role                     String         @default("member") // tenant_admin | finance_officer | programme_officer | communications_officer | member
+  status                   String         @default("Active") // Invited | Active | Suspended
+  joined_at                DateTime       @default(now())
+
+  mosque                   Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  user                     User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([mosque_id, user_id])
+  @@index([user_id, status])
 }
 
 model Donation {
-  donation_id Int      @id @default(autoincrement())
-  mosque_id   Int
-  user_id     Int?
-  amount      Float
-  category    String   // "Zakat" | "Sadaqah" | "Waqf" | "General"
-  method      String   // "Card" | "Transfer" | "Cash"
-  status      String   @default("Pending") // "Pending" | "Completed" | "Failed"
-  date        DateTime @default(now())
+  donation_id              Int            @id @default(autoincrement())
+  mosque_id                Int
+  user_id                  Int?
+  amount_minor             Int
+  currency                 String         @default("NGN")
+  category                 String
+  method                   String
+  external_reference       String?
+  status                   String         @default("Pending") // Pending | Completed | Failed
+  reconciliation_status    String         @default("Unreconciled") // Unreconciled | Reconciled
+  receipt_number           String         @unique
+  recorded_by              Int?
+  verified_by              Int?
+  date                     DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
 
-  mosque      Mosque   @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  mosque                   Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  user                     User?          @relation(fields: [user_id], references: [user_id], onDelete: SetNull)
+
+  @@index([mosque_id, date])
+  @@index([mosque_id, status, reconciliation_status])
 }
 
 model Announcement {
-  announcement_id Int       @id @default(autoincrement())
-  mosque_id       Int
-  admin_id        Int
-  title           String
-  content         String
-  category        String    // "General" | "Event" | "Prayer" | "Urgent"
-  posted_at       DateTime  @default(now())
-  expiry_date     DateTime?
+  announcement_id          Int            @id @default(autoincrement())
+  mosque_id                Int
+  author_id                Int
+  title                    String
+  content                  String
+  category                 String
+  audience                 String         @default("Public") // Public | Members | Staff
+  status                   String         @default("Published") // Draft | Scheduled | Published | Archived
+  publish_at               DateTime       @default(now())
+  posted_at                DateTime       @default(now())
+  expiry_date              DateTime?
+  updated_at               DateTime       @updatedAt
 
-  mosque          Mosque    @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
-  admin           User      @relation(fields: [admin_id], references: [user_id], onDelete: Cascade)
+  mosque                   Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  author                   User           @relation("AnnouncementAuthor", fields: [author_id], references: [user_id], onDelete: Restrict)
+
+  @@index([mosque_id, status, publish_at])
 }
 
 model Program {
-  program_id   Int            @id @default(autoincrement())
-  mosque_id    Int
-  title        String
-  description  String
-  start_date   DateTime
-  end_date     DateTime
-  location     String
-  max_capacity Int            @default(0)
+  program_id               Int            @id @default(autoincrement())
+  mosque_id                Int
+  title                    String
+  description              String
+  category                 String         @default("General")
+  start_date               DateTime
+  end_date                 DateTime
+  location                 String
+  max_capacity             Int            @default(0)
+  visibility               String         @default("Public") // Public | Members
+  status                   String         @default("Published") // Draft | Published | Cancelled | Completed
+  created_at               DateTime       @default(now())
+  updated_at               DateTime       @updatedAt
 
-  mosque       Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
-  registrations Registration[]
+  mosque                   Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  registrations           Registration[]
+
+  @@unique([mosque_id, program_id])
+  @@index([mosque_id, start_date])
 }
 
 model Registration {
-  reg_id     Int      @id @default(autoincrement())
-  user_id    Int
-  program_id Int
-  reg_date   DateTime @default(now())
-  status     String   @default("Registered") // "Registered" | "Attended" | "Cancelled"
+  reg_id                    Int            @id @default(autoincrement())
+  mosque_id                Int
+  user_id                  Int
+  program_id               Int
+  reg_date                 DateTime       @default(now())
+  status                   String         @default("Registered") // Registered | Attended | Cancelled
+  attended_at              DateTime?
 
-  user       User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  program    Program  @relation(fields: [program_id], references: [program_id], onDelete: Cascade)
+  mosque                   Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  user                     User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  program                  Program        @relation(fields: [mosque_id, program_id], references: [mosque_id, program_id], onDelete: Cascade)
 
-  @@unique([user_id, program_id])
+  @@unique([mosque_id, user_id, program_id])
+  @@index([mosque_id, program_id, status])
 }
 
 model Notification {
-  notif_id  Int      @id @default(autoincrement())
-  user_id   Int
-  message   String
-  type      String   // "Email" | "SMS" | "In-App"
-  is_read   Boolean  @default(false)
-  sent_at   DateTime @default(now())
+  notif_id                 Int            @id @default(autoincrement())
+  mosque_id               Int
+  user_id                 Int
+  message                 String
+  type                    String
+  status                  String         @default("Queued") // Queued | Sent | Failed
+  related_type            String?
+  related_id              Int?
+  is_read                 Boolean        @default(false)
+  sent_at                 DateTime?
+  created_at              DateTime       @default(now())
 
-  user      User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  mosque                  Mosque         @relation(fields: [mosque_id], references: [mosque_id], onDelete: Cascade)
+  user                    User           @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([mosque_id, user_id, created_at])
+}
+
+model AuditEvent {
+  audit_id                 Int            @id @default(autoincrement())
+  mosque_id               Int?
+  actor_id                Int?
+  action                  String
+  target_type             String
+  target_id               String?
+  summary                 String
+  request_id              String?
+  ip_address              String?
+  created_at              DateTime       @default(now())
+
+  mosque                  Mosque?        @relation(fields: [mosque_id], references: [mosque_id], onDelete: SetNull)
+  actor                   User?          @relation("AuditActor", fields: [actor_id], references: [user_id], onDelete: SetNull)
+
+  @@index([mosque_id, created_at])
 }

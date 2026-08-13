@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { api, setToken } from '@/lib/api';
 
 export default function MosqueRegister() {
   const params = useParams();
@@ -12,31 +13,31 @@ export default function MosqueRegister() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'member' | 'admin'>('member');
   const [phone, setPhone] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password) {
       setErrorMsg('Please fill in all required fields.');
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters.');
       return;
     }
 
-    // Mock Registration Flow for Sprint 1 Demonstration
-    setSuccessMsg('Account created successfully! Redirecting...');
-    setTimeout(() => {
-      router.push(`/mosque/${slug}/login`);
-    }, 1500);
+    try {
+      const result = await api<{ token: string }>(slug, '/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password, phone }) });
+      setToken(slug, result.token);
+      setSuccessMsg('Your member account is ready.');
+      router.push(`/mosque/${slug}/programs`);
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Registration failed.'); }
   };
 
   return (
@@ -97,18 +98,6 @@ export default function MosqueRegister() {
               className="input-field"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">I am joining as a:</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
-              className="input-field"
-            >
-              <option value="member">Regular Mosque Member</option>
-              <option value="admin">Mosque Administrator</option>
-            </select>
-          </div>
-
           <button type="submit" className="btn-primary w-full mt-4">
             Register Account
           </button>

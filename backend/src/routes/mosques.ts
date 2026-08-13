@@ -1,97 +1,67 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import bcrypt from 'bcryptjs';
 import { tenantHook } from '../middleware/tenantHook.js';
 
 interface CreateMosqueBody {
-  name: string;
-  slug: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-}
-
-interface UpdateMosqueBody {
-  name?: string;
-  address?: string;
-  phone?: string;
-  email?: string;
+  name: string; slug: string; address?: string; phone?: string; email?: string;
+  admin_name: string; admin_email: string; admin_password: string;
 }
 
 export default async function mosqueRoutes(fastify: FastifyInstance) {
-  // POST /api/mosques - Global endpoint to register a new mosque tenant
-  fastify.post('/api/mosques', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { name, slug, address, phone, email } = request.body as CreateMosqueBody;
-
-    if (!name || !slug) {
-      reply.status(400).send({ error: 'Name and unique slug are required fields.' });
-      return;
-    }
-
-    const formattedSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
-
-    try {
-      const existing = await fastify.prisma.mosque.findUnique({
-        where: { slug: formattedSlug }
-      });
-
-      if (existing) {
-        reply.status(409).send({ error: 'A mosque with this slug already exists.' });
-        return;
-      }
-
-      const newMosque = await fastify.prisma.mosque.create({
-        data: {
-          name,
-          slug: formattedSlug,
-          address,
-          phone,
-          email
-        }
-      });
-
-      reply.status(211).send(newMosque);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Internal server error while creating mosque.' });
-    }
+  fastify.get('/api/mosques', async (_request, reply) => {
+    const mosques = await fastify.prisma.mosque.findMany({
+      where: { status: 'Active' },
+      select: { mosque_id: true, name: true, slug: true, address: true, brand_color: true },
+      orderBy: { name: 'asc' }
+    });
+    reply.send(mosques);
   });
 
-  // GET /api/mosques/:slug - Public endpoint to retrieve mosque context info
-  fastify.get('/api/mosques/:slug', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { slug } = request.params as { slug: string };
-
-    const mosque = await fastify.prisma.mosque.findUnique({
-      where: { slug: slug.toLowerCase() }
-    });
-
-    if (!mosque) {
-      reply.status(404).send({ error: `Mosque with slug "${slug}" not found.` });
-      return;
+  fastify.post('/api/mosques', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as CreateMosqueBody;
+    const formattedSlug = body.slug?.toLowerCase().trim().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-');
+    if (!body.name?.trim() || !formattedSlug || !body.admin_name?.trim() || !body.admin_email || !body.admin_password) {
+      return reply.status(400).send({ error: 'Mosque name, slug, and administrator details are required.' });
     }
+    if (body.admin_password.length < 8) return reply.status(400).send({ error: 'Administrator password must contain at least 8 characters.' });
+    if (await fastify.prisma.mosque.findUnique({ where: { slug: formattedSlug } })) {
+      return reply.status(409).send({ error: 'A mosque with this slug already exists.' });
+    }
+    const normalizedEmail = body.admin_email.trim().toLowerCase();
+    const existingUser = await fastify.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser) return reply.status(409).send({ error: 'Administrator email already has an account. Tenant joining requires an invitation.' });
 
+    const password_hash = await bcrypt.hash(body.admin_password, 12);
+    const result = await fastify.prisma.$transaction(async (tx) => {
+      const mosque = await tx.mosque.create({ data: {
+        name: body.name.trim(), slug: formattedSlug, address: body.address, phone: body.phone,
+        email: body.email?.trim().toLowerCase(), status: 'Pending'
+      } });
+      const user = await tx.user.create({ data: { name: body.admin_name.trim(), email: normalizedEmail, password_hash } });
+      const membership = await tx.membership.create({ data: { mosque_id: mosque.mosque_id, user_id: user.user_id, role: 'tenant_admin' } });
+      await tx.auditEvent.create({ data: { mosque_id: mosque.mosque_id, actor_id: user.user_id, action: 'tenant.applied', target_type: 'Mosque', target_id: String(mosque.mosque_id), summary: 'Mosque application submitted.' } });
+      return { mosque, membership_id: membership.membership_id };
+    });
+    reply.status(201).send({ ...result.mosque, message: 'Application submitted for platform approval.' });
+  });
+
+  fastify.get('/api/mosques/:slug', async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const mosque = await fastify.prisma.mosque.findUnique({
+      where: { slug: slug.toLowerCase() },
+      select: { mosque_id: true, name: true, slug: true, status: true, address: true, phone: true, email: true, timezone: true, brand_color: true, logo_url: true }
+    });
+    if (!mosque) return reply.status(404).send({ error: `Mosque with slug "${slug}" not found.` });
     reply.send(mosque);
   });
 
-  // PUT /api/mosques/:slug - Admin endpoint to update mosque profile details
-  fastify.put('/api/mosques/:slug', {
-    preHandler: [tenantHook, fastify.adminOnly]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { name, address, phone, email } = request.body as UpdateMosqueBody;
-
-    try {
-      const updatedMosque = await fastify.prisma.mosque.update({
-        where: { mosque_id: request.tenant.mosque_id },
-        data: {
-          name: name ?? undefined,
-          address: address ?? null,
-          phone: phone ?? null,
-          email: email ?? null
-        }
-      });
-
-      reply.send(updatedMosque);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Internal server error while updating mosque profile.' });
-    }
+  fastify.put('/api/mosques/:slug', { preHandler: [tenantHook, fastify.adminOnly] }, async (request, reply) => {
+    const body = request.body as Partial<{ name: string; address: string; phone: string; email: string; timezone: string; brand_color: string; logo_url: string; notification_email: boolean; notification_in_app: boolean }>;
+    const updated = await fastify.prisma.mosque.update({ where: { mosque_id: request.tenant.mosque_id }, data: {
+      name: body.name?.trim(), address: body.address, phone: body.phone, email: body.email?.trim().toLowerCase(), timezone: body.timezone,
+      brand_color: body.brand_color, logo_url: body.logo_url, notification_email: body.notification_email, notification_in_app: body.notification_in_app
+    } });
+    await fastify.audit(request, 'tenant.updated', 'Mosque', updated.mosque_id, 'Mosque settings updated.');
+    reply.send(updated);
   });
 }

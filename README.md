@@ -1,85 +1,87 @@
-# MasjidHub — Multi-Tenant Administrative Platform for Mosques
+# MasjidHub
 
-MasjidHub is a full-stack, multi-tenant administrative ecosystem designed for managing mosques, prayer times, announcements, programs/courses, member registrations, online/cash donations, and admin analytics dashboards.
+MasjidHub is a multi-tenant mosque operations platform for tenant onboarding, role-based administration, donations and receipts, announcements, programmes, registrations, reminders, reporting, and audit history.
 
----
+## Stack
 
-## 🏗️ Tech Stack
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4
+- API: Node.js, Fastify, TypeScript
+- Data: Prisma and SQLite
+- Security: JWT, bcrypt, Helmet, CORS, rate limiting, tenant membership authorization
 
-- **Backend**: Node.js, Fastify, Prisma ORM, SQLite (`masjidhub.db`), `@fastify/jwt`, `bcryptjs`.
-- **Frontend**: Next.js (App Router), React 19, Tailwind CSS v4, Vanilla CSS Design System.
-- **Database**: SQLite with Prisma models (`Mosque`, `User`, `Announcement`, `Program`, `Registration`, `Donation`, `Notification`).
+SQLite is an intentional project constraint. Tenant isolation is therefore enforced through explicit `mosque_id` ownership, tenant-local memberships, compound relational constraints, centralized authorization hooks, and isolation tests rather than database row-level security.
 
----
+## Structure
 
-## 📁 Repository Structure
-
-```
-masjidhub/
-├── package.json              # Monorepo root scripts
-├── backend/                  # Fastify REST API Server
-│   ├── prisma/
-│   │   ├── schema.prisma    # Database schema
-│   │   ├── seed.ts          # Database seed script
-│   │   └── masjidhub.db     # SQLite database
-│   ├── src/
-│   │   ├── middleware/      # Tenant context hook (tenantHook.ts)
-│   │   ├── plugins/         # Database & JWT auth plugins
-│   │   ├── routes/          # REST API route handlers
-│   │   └── server.ts        # Fastify app builder & server listener
-│   └── test/                # Backend unit & integration test suites
-└── frontend/                 # Next.js Web Portal
-    ├── src/app/
-    │   ├── page.tsx         # Global landing page & mosque search/onboarding
-    │   └── mosque/[slug]/   # Dynamic tenant portal routes
-    │       ├── page.tsx     # Public portal (prayer times, feed, quick actions)
-    │       ├── login/       # Tenant login page
-    │       ├── register/    # Member registration page
-    │       ├── donations/   # Online donation checkout
-    │       ├── programs/    # Religious programs calendar & seat booking
-    │       └── admin/       # Admin console & analytics dashboard
-    └── __tests__/           # Frontend test suites
+```text
+backend/   Fastify API, Prisma schema and backend tests
+frontend/  Next.js public portal, tenant workspace and platform console
 ```
 
----
+## Setup
 
-## ⚡ Quick Start
+Requirements: Node.js 20 or newer and npm.
 
-### 1. Run All Tests
-Execute backend and frontend test suites from the root directory:
 ```bash
-npm test
+npm --prefix backend ci
+npm --prefix frontend ci
+npm run db:setup
 ```
 
-### 2. Database Seeding
-Re-seed the SQLite database with initial mosques (`al-noor`, `al-huda`), admin/member users, and announcements:
+`db:setup` deploys all committed Prisma migrations, generates Prisma Client, and then intentionally loads the local demonstration data. Migration deployment is non-interactive and does not reset an existing database. To deploy schema changes without replacing application data, run `npm run db:migrate`; run `npm run db:generate` after dependency or schema changes when needed.
+
+Copy the example environment files and replace the JWT secret before deployment:
+
 ```bash
-npm run db:seed
+backend/.env.example  -> backend/.env
+frontend/.env.example -> frontend/.env.local
 ```
 
-### 3. Run Development Servers
-- **Backend API** (http://localhost:5000):
-  ```bash
-  npm run dev:backend
-  ```
-- **Frontend App** (http://localhost:3000):
-  ```bash
-  npm run dev:frontend
-  ```
+Run the services in separate terminals:
 
----
-
-## 🔐 Multi-Tenant Architecture
-
-All tenant-scoped API requests enforce isolation using the `X-Mosque-Slug` HTTP header or route parameters:
-```http
-GET /api/announcements HTTP/1.1
-Host: localhost:5000
-X-Mosque-Slug: al-noor
+```bash
+npm run dev:backend
+npm run dev:frontend
 ```
-- Multi-tenant JWT payloads embed `{ user_id, mosque_id, role }` to prevent cross-tenant data access.
 
----
+- Web application: http://localhost:3000
+- API: http://localhost:5000
+- Platform console: http://localhost:3000/platform
 
-## 📄 License
-ISC License.
+## Demonstration accounts
+
+| Purpose | Mosque | Email | Password |
+|---|---|---|---|
+| Platform administrator | — | `platform@masjidhub.local` | `platformPass123` |
+| Tenant administrator | `al-noor` | `ahmad@alnoor.org` | `adminPass123` |
+| Tenant administrator | `al-huda` | `yusuf@alhuda.org` | `adminPass123` |
+| Multi-mosque member | either tenant | `ali@example.org` | `memberPass123` |
+
+The seed step deletes and recreates local demonstration records. Because `db:setup` intentionally includes that step, do not run `db:setup`, `db:seed`, or `db:reset:demo` against a database containing records you need to preserve. `db:reset:demo` is the explicitly destructive local reset command; it drops the database, reapplies migrations, and runs the seed command. Normal schema deployment uses `db:migrate` and is non-destructive.
+
+For future schema changes, create and commit a new migration during development, then use `npm run db:migrate` in non-interactive environments. Back up the SQLite database before production upgrades. Prisma migrations are forward-only; rollback means restoring a tested backup or applying a new corrective migration.
+
+## Tenant and role model
+
+A global user can have a separate membership in several mosques. Every signed tenant token identifies the active membership and mosque. Server authorization reloads that membership on protected requests, so role or membership suspension takes effect without waiting for token expiry.
+
+Tenant roles are:
+
+- `tenant_admin`
+- `finance_officer`
+- `programme_officer`
+- `communications_officer`
+- `member`
+
+New public accounts always receive the member role. Privileged roles can only be assigned by a tenant administrator. New mosque applications remain pending until activated through the platform console.
+
+## Verification
+
+```bash
+npm --prefix backend test
+npm --prefix backend run build
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+The online donation endpoint is a prototype record-and-receipt flow. It does not process or hold real funds.

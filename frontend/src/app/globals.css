@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f7f6;
-  --foreground: #1e293b;
-  --primary: #059669; /* Emerald 600 */
-  --primary-hover: #047857; /* Emerald 700 */
-  --primary-light: #d1fae5; /* Emerald 100 */
-  --accent: #d97706; /* Amber 600 */
+  --background: #f7f5ef;
+  --foreground: #183044;
+  --primary: #087f5b;
+  --primary-hover: #066748;
+  --primary-light: #dcefe7;
+  --accent: #d89b2b;
   --accent-hover: #b45309; /* Amber 700 */
   --card-bg: #ffffff;
   --card-border: #e2e8f0;
@@ -39,6 +39,11 @@ body {
   padding: 0;
   transition: var(--transition);
 }
+
+h1, h2, h3 { font-family: var(--font-lora), Georgia, serif; letter-spacing: -0.025em; }
+
+.tenant-band { border-top: 4px solid var(--tenant-color, var(--primary)); background: linear-gradient(90deg, color-mix(in srgb, var(--tenant-color, var(--primary)) 10%, white), var(--card-bg) 45%); }
+.eyebrow { font: 700 .7rem/1 var(--font-geist-mono), monospace; letter-spacing: .13em; text-transform: uppercase; color: var(--primary); }
 
 /* Premium Layout & Card Utilities */
 .masjid-gradient-bg {
@@ -83,6 +88,7 @@ body {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
 }
+.input-field:focus-visible, .btn-primary:focus-visible, .btn-secondary:focus-visible, a:focus-visible, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 70%, white); outline-offset: 3px; }
 
 /* Custom Buttons */
 .btn-primary {
@@ -134,3 +140,5 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.4s ease forwards;
 }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

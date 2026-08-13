@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { api, setToken } from '@/lib/api';
 
 export default function MosqueLogin() {
   const params = useParams();
@@ -14,7 +15,8 @@ export default function MosqueLogin() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -24,15 +26,14 @@ export default function MosqueLogin() {
       return;
     }
 
-    // Mock Login Verification for Sprint 1 Demonstration
-    if (email.includes('@') && password.length >= 6) {
-      setSuccessMsg('Successfully authenticated!');
-      setTimeout(() => {
-        router.push(`/mosque/${slug}`);
-      }, 1500);
-    } else {
-      setErrorMsg('Invalid email address or password must be at least 6 characters.');
-    }
+    setIsSubmitting(true);
+    try {
+      const result = await api<{ token: string; membership: { role: string } }>(slug, '/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      setToken(slug, result.token);
+      setSuccessMsg('Signed in. Opening your mosque workspace…');
+      router.push(result.membership.role === 'member' ? `/mosque/${slug}/programs` : `/mosque/${slug}/admin`);
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Sign-in failed.'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -73,8 +74,8 @@ export default function MosqueLogin() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full mt-4">
-            Sign In
+          <button type="submit" disabled={isSubmitting} className="btn-primary w-full mt-4">
+            {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 

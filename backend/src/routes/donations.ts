@@ -1,172 +1,92 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import { tenantHook } from '../middleware/tenantHook.js';
+import type { JWTPayload } from '../plugins/auth.js';
 
-interface WebDonationBody {
-  amount: number;
-  category: 'Zakat' | 'Sadaqah' | 'Waqf' | 'General';
-  method: 'Card' | 'Transfer';
+interface DonationBody {
+  amount: number; category: 'Zakat' | 'Sadaqah' | 'Waqf' | 'General';
+  method: 'Card' | 'Transfer' | 'Cash'; currency?: string; external_reference?: string; donor_email?: string;
 }
 
-interface ManualDonationBody {
-  amount: number;
-  category: 'Zakat' | 'Sadaqah' | 'Waqf' | 'General';
-  method: 'Cash';
-  donor_name?: string;
-  donor_email?: string;
-}
-
-interface JWTPayload {
-  user_id: number;
-  email: string;
-  role: string;
-  mosque_id: number;
-}
+const categories = ['Zakat', 'Sadaqah', 'Waqf', 'General'];
+const publicDonation = (d: Record<string, unknown> & { amount_minor: number }) => ({ ...d, amount: d.amount_minor / 100 });
 
 export default async function donationRoutes(fastify: FastifyInstance) {
-  // Apply tenantHook as a preHandler for all routes in this plugin
   fastify.addHook('preHandler', tenantHook);
 
-  // POST /api/donations - Public/Member online checkout simulation endpoint
-  fastify.post('/api/donations', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { amount, category, method } = request.body as WebDonationBody;
+  fastify.post('/api/donations', async (request, reply) => {
+    const { amount, category, method, currency = 'NGN', external_reference } = request.body as DonationBody;
+    if (!Number.isFinite(amount) || amount <= 0) return reply.status(400).send({ error: 'Donation amount must be greater than zero.' });
+    if (!categories.includes(category)) return reply.status(400).send({ error: 'Invalid donation category.' });
+    if (!['Card', 'Transfer'].includes(method)) return reply.status(400).send({ error: 'Invalid web donation payment method.' });
 
-    if (!amount || !category || !method) {
-      reply.status(400).send({ error: 'Amount, category, and payment method are required.' });
-      return;
-    }
-
-    if (amount <= 0) {
-      reply.status(400).send({ error: 'Donation amount must be greater than zero.' });
-      return;
-    }
-
-    const categories = ['Zakat', 'Sadaqah', 'Waqf', 'General'];
-    if (!categories.includes(category)) {
-      reply.status(400).send({ error: 'Invalid donation category.' });
-      return;
-    }
-
-    if (method !== 'Card' && method !== 'Transfer') {
-      reply.status(400).send({ error: 'Invalid web donation payment method.' });
-      return;
-    }
-
-    // Try to resolve user token if they are logged in (donation is optional-auth)
-    let authenticatedUserId: number | null = null;
+    let user_id: number | undefined;
     try {
-      const decoded = await request.jwtVerify() as JWTPayload;
-      if (decoded && decoded.mosque_id === request.tenant.mosque_id) {
-        authenticatedUserId = decoded.user_id;
+      await request.jwtVerify();
+      const payload = request.user as JWTPayload;
+      if (payload.mosque_id === request.tenant.mosque_id && payload.membership_id) {
+        const membership = await fastify.prisma.membership.findUnique({ where: { membership_id: payload.membership_id } });
+        if (membership?.status === 'Active') user_id = payload.user_id;
       }
-    } catch (err) {
-      // Allow anonymous donations by ignoring signature verification failures
-    }
+    } catch { /* anonymous donations are allowed */ }
 
-    try {
-      // Simulate transaction processing delay & success confirmation
-      const donation = await fastify.prisma.donation.create({
-        data: {
-          mosque_id: request.tenant.mosque_id,
-          user_id: authenticatedUserId,
-          amount,
-          category,
-          method,
-          status: 'Completed', // Autocompleted for simulation
-          date: new Date()
-        }
-      });
-
-      reply.status(201).send(donation);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Failed to record donation.' });
-    }
+    const donation = await fastify.prisma.donation.create({ data: {
+      mosque_id: request.tenant.mosque_id, user_id, amount_minor: Math.round(amount * 100), currency: currency.toUpperCase(),
+      category, method, external_reference, status: 'Completed', receipt_number: `MH-${randomUUID().slice(0, 8).toUpperCase()}`
+    } });
+    await fastify.audit(request, 'donation.completed', 'Donation', donation.donation_id, `Donation receipt ${donation.receipt_number} issued.`);
+    reply.status(201).send(publicDonation(donation));
   });
 
-  // POST /api/admin/donations/manual - Admins manually record offline cash donations
-  fastify.post('/api/admin/donations/manual', {
-    preHandler: [fastify.adminOnly]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { amount, category, method, donor_email } = request.body as ManualDonationBody;
-
-    if (!amount || !category || method !== 'Cash') {
-      reply.status(400).send({ error: 'Amount, category, and cash payment method are required.' });
-      return;
-    }
-
-    if (amount <= 0) {
-      reply.status(400).send({ error: 'Donation amount must be greater than zero.' });
-      return;
-    }
-
-    // Attempt to link member if email is supplied
-    let donorUserId: number | null = null;
+  fastify.post('/api/admin/donations/manual', { preHandler: [fastify.requireMembership(['tenant_admin', 'finance_officer'])] }, async (request, reply) => {
+    const { amount, category, method, currency = 'NGN', external_reference, donor_email } = request.body as DonationBody;
+    if (!Number.isFinite(amount) || amount <= 0 || method !== 'Cash' || !categories.includes(category)) return reply.status(400).send({ error: 'A positive amount, valid category, and cash method are required.' });
+    let user_id: number | undefined;
     if (donor_email) {
-      const member = await fastify.prisma.user.findFirst({
-        where: {
-          mosque_id: request.tenant.mosque_id,
-          email: donor_email.toLowerCase()
-        }
-      });
-      if (member) {
-        donorUserId = member.user_id;
+      const user = await fastify.prisma.user.findUnique({ where: { email: donor_email.toLowerCase() } });
+      if (user) {
+        const member = await fastify.prisma.membership.findUnique({ where: { mosque_id_user_id: { mosque_id: request.tenant.mosque_id, user_id: user.user_id } } });
+        if (member) user_id = user.user_id;
       }
     }
-
-    try {
-      const donation = await fastify.prisma.donation.create({
-        data: {
-          mosque_id: request.tenant.mosque_id,
-          user_id: donorUserId,
-          amount,
-          category,
-          method: 'Cash',
-          status: 'Completed',
-          date: new Date()
-        }
-      });
-
-      reply.status(201).send(donation);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Failed to log offline manual donation.' });
-    }
+    const actor = request.user as JWTPayload;
+    const donation = await fastify.prisma.donation.create({ data: {
+      mosque_id: request.tenant.mosque_id, user_id, amount_minor: Math.round(amount * 100), currency: currency.toUpperCase(), category,
+      method: 'Cash', external_reference, status: 'Completed', recorded_by: actor.user_id, receipt_number: `MH-${randomUUID().slice(0, 8).toUpperCase()}`
+    } });
+    await fastify.audit(request, 'donation.recorded', 'Donation', donation.donation_id, 'Offline donation recorded.');
+    reply.status(201).send(publicDonation(donation));
   });
 
-  // GET /api/members/donations - Members retrieve their past contributions
-  fastify.get('/api/members/donations', {
-    preHandler: [fastify.authenticate]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/members/donations', { preHandler: [fastify.requireMembership()] }, async (request, reply) => {
     const payload = request.user as JWTPayload;
-
-    try {
-      const contributions = await fastify.prisma.donation.findMany({
-        where: {
-          mosque_id: request.tenant.mosque_id,
-          user_id: payload.user_id
-        },
-        orderBy: { date: 'desc' }
-      });
-      reply.send(contributions);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Failed to retrieve donation history.' });
-    }
+    const rows = await fastify.prisma.donation.findMany({ where: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id }, orderBy: { date: 'desc' } });
+    reply.send(rows.map(publicDonation));
   });
 
-  // GET /api/admin/donations - Admins fetch all donation logs for report compilation
-  fastify.get('/api/admin/donations', {
-    preHandler: [fastify.adminOnly]
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const logs = await fastify.prisma.donation.findMany({
-        where: { mosque_id: request.tenant.mosque_id },
-        orderBy: { date: 'desc' }
-      });
-      reply.send(logs);
-    } catch (err) {
-      fastify.log.error(err);
-      reply.status(500).send({ error: 'Failed to fetch donations log.' });
-    }
+  fastify.get('/api/admin/donations', { preHandler: [fastify.requireMembership(['tenant_admin', 'finance_officer'])] }, async (request, reply) => {
+    const query = request.query as { status?: string; category?: string; reconciliation_status?: string; search?: string };
+    const rows = await fastify.prisma.donation.findMany({ where: {
+      mosque_id: request.tenant.mosque_id, status: query.status, category: query.category, reconciliation_status: query.reconciliation_status,
+      OR: query.search ? [{ receipt_number: { contains: query.search } }, { external_reference: { contains: query.search } }] : undefined
+    }, orderBy: { date: 'desc' } });
+    reply.send(rows.map(publicDonation));
+  });
+
+  fastify.patch('/api/admin/donations/:id/reconcile', { preHandler: [fastify.requireMembership(['tenant_admin', 'finance_officer'])] }, async (request, reply) => {
+    const id = Number((request.params as { id: string }).id);
+    const found = await fastify.prisma.donation.findFirst({ where: { donation_id: id, mosque_id: request.tenant.mosque_id } });
+    if (!found) return reply.status(404).send({ error: 'Donation not found.' });
+    const actor = request.user as JWTPayload;
+    const updated = await fastify.prisma.donation.update({ where: { donation_id: id }, data: { reconciliation_status: 'Reconciled', verified_by: actor.user_id } });
+    await fastify.audit(request, 'donation.reconciled', 'Donation', id, 'Donation reconciled.');
+    reply.send(publicDonation(updated));
+  });
+
+  fastify.get('/api/admin/donations/export.csv', { preHandler: [fastify.requireMembership(['tenant_admin', 'finance_officer'])] }, async (request, reply) => {
+    const rows = await fastify.prisma.donation.findMany({ where: { mosque_id: request.tenant.mosque_id }, orderBy: { date: 'desc' } });
+    const csv = ['receipt,date,amount,currency,category,method,status,reconciliation', ...rows.map(d => [d.receipt_number, d.date.toISOString(), (d.amount_minor / 100).toFixed(2), d.currency, d.category, d.method, d.status, d.reconciliation_status].join(','))].join('\n');
+    await fastify.audit(request, 'donations.exported', 'DonationReport', null, 'Donation report exported.');
+    reply.header('Content-Type', 'text/csv').header('Content-Disposition', 'attachment; filename="donations.csv"').send(csv);
   });
 }

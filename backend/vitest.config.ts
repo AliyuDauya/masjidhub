@@ -1,0 +1,11 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    include: ['test/current/**/*.test.ts'],
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } }
+  }
+});

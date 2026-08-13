@@ -1,264 +1,46 @@
 'use client';
 
-import React, { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { api, clearToken } from '@/lib/api';
 
-interface Announcement {
-  id: number;
-  title: string;
-  content: string;
-  category: 'General' | 'Event' | 'Prayer' | 'Urgent';
-  posted_at: string;
-}
+type Tab = 'announcements' | 'members' | 'donations' | 'settings';
+interface Mosque { name: string; address?: string; phone?: string; email?: string; timezone: string; brand_color: string }
+interface Announcement { announcement_id: number; title: string; content: string; category: string; posted_at: string }
+interface Membership { membership_id: number; role: string; status: string; user: { name: string; email: string } }
+interface Donation { donation_id: number; receipt_number: string; amount: number; currency: string; category: string; reconciliation_status: string }
 
 export default function AdminDashboard() {
-  const params = useParams();
-  const slug = typeof params?.slug === 'string' ? params.slug : 'al-noor';
+  const params = useParams(); const router = useRouter(); const slug = typeof params?.slug === 'string' ? params.slug : 'al-noor';
+  const [tab, setTab] = useState<Tab>('announcements'); const [mosque, setMosque] = useState<Mosque | null>(null); const [announcements, setAnnouncements] = useState<Announcement[]>([]); const [members, setMembers] = useState<Membership[]>([]); const [donations, setDonations] = useState<Donation[]>([]); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+  const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [category, setCategory] = useState('General');
+  const [invite, setInvite] = useState({ name: '', email: '', role: 'member', temporary_password: '' });
 
-  // State Management
-  const [activeTab, setActiveTab] = useState<'announcements' | 'settings'>('announcements');
+  async function load() {
+    setError('');
+    try { const [m,a,ms,ds] = await Promise.all([api<Mosque>(null, `/api/mosques/${slug}`), api<Announcement[]>(slug, '/api/announcements'), api<Membership[]>(slug, '/api/admin/memberships'), api<Donation[]>(slug, '/api/admin/donations')]); setMosque(m); setAnnouncements(a); setMembers(ms); setDonations(ds); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Workspace could not be loaded.'); }
+  }
+  useEffect(() => { load(); }, [slug]);
+  function done(text: string) { setMessage(text); setError(''); setTimeout(() => setMessage(''), 3000); }
 
-  // Mosque Settings State
-  const [name, setName] = useState('Al-Noor Central Masjid');
-  const [address, setAddress] = useState('123 Islamic Center Ave, Cityville');
-  const [phone, setPhone] = useState('+2348031234567');
-  const [email, setEmail] = useState('contact@alnoormasjid.org');
-  const [settingsStatus, setSettingsStatus] = useState('');
+  async function publish(e: FormEvent) { e.preventDefault(); try { await api(slug, '/api/admin/announcements', { method: 'POST', body: JSON.stringify({ title, content, category, status: 'Published', audience: 'Public' }) }); setTitle(''); setContent(''); done('Announcement published.'); load(); } catch (x) { setError(x instanceof Error ? x.message : 'Could not publish.'); } }
+  async function inviteMember(e: FormEvent) { e.preventDefault(); try { await api(slug, '/api/admin/memberships/invite', { method: 'POST', body: JSON.stringify(invite) }); setInvite({ name: '', email: '', role: 'member', temporary_password: '' }); done('Member added.'); load(); } catch (x) { setError(x instanceof Error ? x.message : 'Could not add member.'); } }
+  async function saveSettings(e: FormEvent) { e.preventDefault(); try { setMosque(await api<Mosque>(slug, `/api/mosques/${slug}`, { method: 'PUT', body: JSON.stringify(mosque) })); done('Mosque settings saved.'); } catch (x) { setError(x instanceof Error ? x.message : 'Could not save settings.'); } }
+  async function exportDonations() { try { const csv = await api<string>(slug, '/api/admin/donations/export.csv'); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); const link = document.createElement('a'); link.href = url; link.download = `${slug}-donations.csv`; link.click(); URL.revokeObjectURL(url); done('Donation report exported.'); } catch (x) { setError(x instanceof Error ? x.message : 'Could not export donations.'); } }
 
-  // Announcements State
-  const [announcements, setAnnouncements] = useState<Announcement[]>([
-    {
-      id: 1,
-      title: 'Summer Quran Program Registration Open',
-      content: 'Classes start next month. Register under the programs tab.',
-      category: 'Event',
-      posted_at: '2026-07-16'
-    },
-    {
-      id: 2,
-      title: 'Friday Khutbah Time Adjustment',
-      content: 'The first Jumuah sermon will commence at 1:15 PM.',
-      category: 'Urgent',
-      posted_at: '2026-07-15'
-    }
-  ]);
-
-  // Form State for New Announcement
-  const [newTitle, setNewTitle] = useState('');
-  const [newContent, setNewContent] = useState('');
-  const [newCategory, setNewCategory] = useState<'General' | 'Event' | 'Prayer' | 'Urgent'>('General');
-  const [announcementStatus, setAnnouncementStatus] = useState('');
-
-  const handleUpdateSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSettingsStatus('Mosque profile details updated successfully!');
-    setTimeout(() => setSettingsStatus(''), 3000);
-  };
-
-  const handleCreateAnnouncement = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle || !newContent) return;
-
-    const created: Announcement = {
-      id: Date.now(),
-      title: newTitle,
-      content: newContent,
-      category: newCategory,
-      posted_at: new Date().toISOString().split('T')[0]
-    };
-
-    setAnnouncements([created, ...announcements]);
-    setNewTitle('');
-    setNewContent('');
-    setNewCategory('General');
-    setAnnouncementStatus('Announcement posted successfully!');
-    setTimeout(() => setAnnouncementStatus(''), 3000);
-  };
-
-  const handleDeleteAnnouncement = (id: number) => {
-    setAnnouncements(announcements.filter((ann) => ann.id !== id));
-  };
-
-  return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col justify-between">
-      {/* Top Navbar */}
-      <header className="masjid-gradient-bg text-white py-4 px-6 shadow-md flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-bold">Admin Control Panel</h1>
-          <p className="text-xs text-emerald-200">Tenant: /mosque/{slug}</p>
-        </div>
-        <Link href={`/mosque/${slug}`} className="btn-secondary text-xs border-emerald-400 text-emerald-100 hover:bg-emerald-800">
-          Exit to Public Portal
-        </Link>
-      </header>
-
-      {/* Admin Dashboard Area */}
-      <div className="max-w-6xl mx-auto px-6 py-8 flex-grow w-full grid md:grid-cols-4 gap-8">
-        
-        {/* Navigation Sidebar */}
-        <aside className="md:col-span-1 space-y-2">
-          <button
-            onClick={() => setActiveTab('announcements')}
-            className={`w-full text-left px-4 py-3 rounded-lg font-semibold transition-all ${
-              activeTab === 'announcements'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-            }`}
-          >
-            📢 Announcements
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`w-full text-left px-4 py-3 rounded-lg font-semibold transition-all ${
-              activeTab === 'settings'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-            }`}
-          >
-            ⚙️ Mosque Settings
-          </button>
-        </aside>
-
-        {/* Dynamic Workspace Container */}
-        <section className="md:col-span-3">
-          
-          {/* TAB 1: ANNOUNCEMENTS MANAGEMENT */}
-          {activeTab === 'announcements' && (
-            <div className="space-y-8 animate-fade-in">
-              {/* Creator Form */}
-              <div className="card-premium">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Publish Announcement</h3>
-                {announcementStatus && <p className="mb-4 text-sm font-semibold text-green-500">{announcementStatus}</p>}
-                
-                <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Title</label>
-                    <input
-                      type="text"
-                      placeholder="Announcement Title"
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      className="input-field"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Category</label>
-                    <select
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value as any)}
-                      className="input-field"
-                    >
-                      <option value="General">General</option>
-                      <option value="Event">Event</option>
-                      <option value="Prayer">Prayer</option>
-                      <option value="Urgent">Urgent</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Content</label>
-                    <textarea
-                      placeholder="Write your announcement details here..."
-                      value={newContent}
-                      onChange={(e) => setNewContent(e.target.value)}
-                      className="input-field min-h-24"
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="btn-primary">
-                    Post Announcement
-                  </button>
-                </form>
-              </div>
-
-              {/* Announcement List & Delete Controls */}
-              <div className="card-premium">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Active Announcements ({announcements.length})</h3>
-                <div className="space-y-4">
-                  {announcements.map((ann) => (
-                    <div key={ann.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded">
-                            {ann.category}
-                          </span>
-                          <span className="text-xs text-slate-400">{ann.posted_at}</span>
-                        </div>
-                        <h4 className="font-bold text-slate-800 dark:text-white">{ann.title}</h4>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">{ann.content}</p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteAnnouncement(ann.id)}
-                        className="text-xs text-red-500 hover:text-red-700 font-semibold px-3 py-1 border border-red-200 hover:border-red-400 rounded transition-all"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: SETTINGS MANAGEMENT */}
-          {activeTab === 'settings' && (
-            <div className="card-premium animate-fade-in">
-              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Edit Mosque Details</h3>
-              {settingsStatus && <p className="mb-4 text-sm font-semibold text-green-500">{settingsStatus}</p>}
-
-              <form onSubmit={handleUpdateSettings} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Mosque Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Physical Address</label>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Contact Phone</label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Official Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-
-                <button type="submit" className="btn-primary mt-2">
-                  Save Changes
-                </button>
-              </form>
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Footer */}
-      <footer className="py-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-center text-xs text-slate-500">
-        <p>&copy; {new Date().getFullYear()} MasjidHub Admin Console.</p>
-      </footer>
-    </main>
-  );
+  const nav: Array<[Tab,string]> = [['announcements','Announcements'],['members','People & roles'],['donations','Donations'],['settings','Mosque settings']];
+  return <main className="min-h-screen" style={{ '--tenant-color': mosque?.brand_color || '#087f5b' } as React.CSSProperties}>
+    <header className="tenant-band px-6 py-5 flex justify-between items-center"><div><p className="eyebrow">Tenant workspace / {slug}</p><h1 className="text-3xl font-bold">{mosque?.name || 'Mosque administration'}</h1></div><div className="flex gap-2"><Link href={`/mosque/${slug}/admin/analytics`} className="btn-secondary text-sm">View reports</Link><button className="btn-secondary text-sm" onClick={() => { clearToken(slug); router.push(`/mosque/${slug}`); }}>Sign out</button></div></header>
+    <div className="max-w-6xl mx-auto px-6 py-10 grid md:grid-cols-[220px_1fr] gap-8">
+      <nav className="space-y-2">{nav.map(([id,label]) => <button key={id} onClick={() => setTab(id)} className={tab === id ? 'btn-primary w-full' : 'btn-secondary w-full'}>{label}</button>)}</nav>
+      <section>{error && <p className="mb-5 p-4 rounded-lg bg-red-50 text-red-700">{error}</p>}{message && <p className="mb-5 p-4 rounded-lg bg-emerald-50 text-emerald-800">{message}</p>}
+        {tab === 'announcements' && <div className="space-y-6"><form onSubmit={publish} className="card-premium space-y-4"><p className="eyebrow">Public communication</p><h2 className="text-3xl font-bold">Publish an announcement</h2><input className="input-field" value={title} onChange={e => setTitle(e.target.value)} placeholder="Announcement title" required/><select className="input-field" value={category} onChange={e => setCategory(e.target.value)}><option>General</option><option>Event</option><option>Prayer</option><option>Urgent</option></select><textarea className="input-field min-h-28" value={content} onChange={e => setContent(e.target.value)} placeholder="What should the community know?" required/><button className="btn-primary">Publish announcement</button></form><div className="card-premium"><h2 className="text-2xl font-bold mb-5">Published noticeboard</h2>{announcements.map(a => <article key={a.announcement_id} className="py-4 border-b"><p className="eyebrow">{a.category}</p><h3 className="text-xl mt-2">{a.title}</h3><p className="text-slate-600 mt-1">{a.content}</p></article>)}</div></div>}
+        {tab === 'members' && <div className="space-y-6"><form onSubmit={inviteMember} className="card-premium space-y-4"><p className="eyebrow">Access control</p><h2 className="text-3xl font-bold">Add a person</h2><div className="grid sm:grid-cols-2 gap-4"><input className="input-field" placeholder="Full name" value={invite.name} onChange={e => setInvite({...invite,name:e.target.value})} required/><input className="input-field" type="email" placeholder="Email" value={invite.email} onChange={e => setInvite({...invite,email:e.target.value})} required/><select className="input-field" value={invite.role} onChange={e => setInvite({...invite,role:e.target.value})}><option value="member">Member</option><option value="finance_officer">Finance officer</option><option value="programme_officer">Programme officer</option><option value="communications_officer">Communications officer</option><option value="tenant_admin">Tenant administrator</option></select><input className="input-field" type="password" minLength={8} placeholder="Temporary password" value={invite.temporary_password} onChange={e => setInvite({...invite,temporary_password:e.target.value})} required/></div><button className="btn-primary">Add person</button></form><div className="card-premium"><h2 className="text-2xl font-bold mb-5">People with access</h2>{members.map(m => <div key={m.membership_id} className="flex justify-between py-3 border-b"><span><strong>{m.user.name}</strong><small className="block text-slate-500">{m.user.email}</small></span><span className="text-sm">{m.role.replaceAll('_',' ')} · {m.status}</span></div>)}</div></div>}
+        {tab === 'donations' && <div className="card-premium"><div className="flex justify-between mb-6"><div><p className="eyebrow">Financial records</p><h2 className="text-3xl font-bold">Donation ledger</h2></div><button onClick={exportDonations} className="btn-secondary text-sm">Export CSV</button></div>{donations.map(d => <div key={d.donation_id} className="grid grid-cols-4 gap-3 py-3 border-b text-sm"><strong>{d.receipt_number}</strong><span>{d.currency} {d.amount.toLocaleString()}</span><span>{d.category}</span><span>{d.reconciliation_status}</span></div>)}</div>}
+        {tab === 'settings' && mosque && <form onSubmit={saveSettings} className="card-premium space-y-4"><p className="eyebrow">Tenant identity</p><h2 className="text-3xl font-bold">Mosque settings</h2><input className="input-field" value={mosque.name} onChange={e => setMosque({...mosque,name:e.target.value})}/><input className="input-field" value={mosque.address || ''} onChange={e => setMosque({...mosque,address:e.target.value})} placeholder="Address"/><div className="grid sm:grid-cols-2 gap-4"><input className="input-field" value={mosque.email || ''} onChange={e => setMosque({...mosque,email:e.target.value})} placeholder="Contact email"/><input className="input-field" value={mosque.phone || ''} onChange={e => setMosque({...mosque,phone:e.target.value})} placeholder="Phone"/><input className="input-field" value={mosque.timezone} onChange={e => setMosque({...mosque,timezone:e.target.value})} placeholder="Timezone"/><input className="input-field" type="color" value={mosque.brand_color} onChange={e => setMosque({...mosque,brand_color:e.target.value})}/></div><button className="btn-primary">Save settings</button></form>}
+      </section>
+    </div>
+  </main>;
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { api } from '@/lib/api';
 
 interface MosqueMock {
   name: string;
   slug: string;
-  location: string;
+  address?: string;
 }
 
 export default function GlobalLandingPage() {
@@ -18,28 +19,30 @@ export default function GlobalLandingPage() {
   const [newMosqueSlug, setNewMosqueSlug] = useState('');
   const [newMosqueAddress, setNewMosqueAddress] = useState('');
   const [newMosqueEmail, setNewMosqueEmail] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   // Sample static seed for demonstration
-  const [mosques, setMosques] = useState<MosqueMock[]>([
-    { name: 'Al-Noor Central Masjid', slug: 'al-noor', location: '123 Main St, Cityville' },
-    { name: 'Masjid Al-Huda', slug: 'al-huda', location: '456 East Road, Green Valley' },
-    { name: 'Central Mosque', slug: 'central', location: '789 Islamic Center Way' },
-  ]);
+  const [mosques, setMosques] = useState<MosqueMock[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { api<MosqueMock[]>(null, '/api/mosques').then(setMosques).catch(e => setErrorMsg(e.message)).finally(() => setLoading(false)); }, []);
 
   const filteredMosques = mosques.filter((m) =>
     m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     m.slug.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleRegisterMosque = (e: React.FormEvent) => {
+  const handleRegisterMosque = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!newMosqueName || !newMosqueSlug) {
-      setErrorMsg('Name and slug are required fields.');
+    if (!newMosqueName || !newMosqueSlug || !adminName || !adminEmail || !adminPassword) {
+      setErrorMsg('Mosque and administrator details are required.');
       return;
     }
 
@@ -51,20 +54,17 @@ export default function GlobalLandingPage() {
       return;
     }
 
-    const created: MosqueMock = {
-      name: newMosqueName,
-      slug: cleanSlug,
-      location: newMosqueAddress || 'No address provided'
-    };
-
-    setMosques([...mosques, created]);
-    setSuccessMsg(`Success! Registered "${newMosqueName}".`);
+    try {
+      await api(null, '/api/mosques', { method: 'POST', body: JSON.stringify({ name: newMosqueName, slug: cleanSlug, address: newMosqueAddress, email: newMosqueEmail, admin_name: adminName, admin_email: adminEmail, admin_password: adminPassword }) });
+      setSuccessMsg('Application received. A platform administrator must activate the mosque before sign-in.');
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Application failed.'); return; }
     
     // Reset Form
     setNewMosqueName('');
     setNewMosqueSlug('');
     setNewMosqueAddress('');
     setNewMosqueEmail('');
+    setAdminName(''); setAdminEmail(''); setAdminPassword('');
 
     setTimeout(() => {
       setShowRegisterModal(false);
@@ -105,13 +105,13 @@ export default function GlobalLandingPage() {
       {/* Mosque List Section */}
       <section className="max-w-5xl mx-auto px-6 py-12 flex-grow w-full">
         <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">Registered Mosques</h2>
-        {filteredMosques.length > 0 ? (
+        {loading ? <p className="text-slate-500">Loading mosque directory…</p> : filteredMosques.length > 0 ? (
           <div className="grid md:grid-cols-3 gap-6">
             {filteredMosques.map((mosque) => (
               <div key={mosque.slug} className="card-premium flex flex-col justify-between h-52">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{mosque.name}</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{mosque.location}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{mosque.address || 'Address not published'}</p>
                 </div>
                 <Link
                   href={`/mosque/${mosque.slug}`}
@@ -199,9 +199,18 @@ export default function GlobalLandingPage() {
                   className="input-field"
                 />
               </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                <p className="eyebrow mb-3">First administrator</p>
+                <div className="space-y-3">
+                  <input type="text" value={adminName} onChange={(e) => setAdminName(e.target.value)} placeholder="Administrator full name" className="input-field" required />
+                  <input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="Administrator sign-in email" className="input-field" required />
+                  <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Password (at least 8 characters)" minLength={8} className="input-field" required />
+                </div>
+              </div>
               
               <button type="submit" className="btn-primary w-full mt-2">
-                Submit Registration
+                Send application
               </button>
             </form>
           </div>

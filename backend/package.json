@@ -9,7 +9,11 @@
     "build": "tsc",
     "test": "vitest run",
     "test:node": "node test/standalone_runner.js",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:generate && npm run db:seed",
+    "db:reset:demo": "prisma migrate reset --force"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

@@ -1,0 +1,16 @@
+'use client';
+
+import { FormEvent, useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+
+interface Tenant { mosque_id: number; name: string; slug: string; status: string; created_at: string; _count: { memberships: number; donations: number; programs: number } }
+
+export default function PlatformConsole() {
+  const [tenants, setTenants] = useState<Tenant[]>([]); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [authenticated, setAuthenticated] = useState(false);
+  async function load() { try { setTenants(await api<Tenant[]>(null, '/api/platform/tenants')); setAuthenticated(true); } catch { setAuthenticated(false); } }
+  useEffect(() => { load(); }, []);
+  async function login(e: FormEvent) { e.preventDefault(); try { const result = await api<{token:string}>(null, '/api/platform/auth/login', { method: 'POST', body: JSON.stringify({email,password}) }); localStorage.setItem('masjidhub:platform:token', result.token); await load(); } catch (x) { setError(x instanceof Error ? x.message : 'Sign-in failed.'); } }
+  async function status(id: number, value: string) { try { await api(null, `/api/platform/tenants/${id}/status`, { method:'PATCH', body:JSON.stringify({status:value}) }); await load(); } catch (x) { setError(x instanceof Error ? x.message : 'Status could not be changed.'); } }
+  if (!authenticated) return <main className="min-h-screen grid place-items-center p-6"><form onSubmit={login} className="card-premium w-full max-w-md space-y-4"><p className="eyebrow">MasjidHub platform</p><h1 className="text-3xl font-bold">Platform administration</h1><p className="text-slate-500">Approve mosque applications and manage tenant availability.</p>{error && <p className="text-red-600">{error}</p>}<input className="input-field" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Platform email"/><input className="input-field" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password"/><button className="btn-primary w-full">Sign in</button></form></main>;
+  return <main className="min-h-screen"><header className="tenant-band px-6 py-5"><p className="eyebrow">Platform operations</p><h1 className="text-3xl font-bold">Mosque tenants</h1></header><section className="max-w-6xl mx-auto px-6 py-12">{error && <p className="text-red-600 mb-5">{error}</p>}<div className="space-y-4">{tenants.map(t => <article key={t.mosque_id} className="card-premium grid md:grid-cols-[1fr_auto_auto] gap-5 items-center"><div><p className="eyebrow">/{t.slug} · {t.status}</p><h2 className="text-2xl font-bold mt-2">{t.name}</h2><p className="text-sm text-slate-500 mt-1">{t._count.memberships} people · {t._count.programs} programmes · {t._count.donations} donations</p></div><time className="text-sm text-slate-500">Applied {new Date(t.created_at).toLocaleDateString()}</time><div className="flex gap-2">{t.status !== 'Active' && <button className="btn-primary text-sm" onClick={()=>status(t.mosque_id,'Active')}>Activate</button>}{t.status !== 'Suspended' && <button className="btn-secondary text-sm" onClick={()=>status(t.mosque_id,'Suspended')}>Suspend</button>}</div></article>)}</div></section></main>;
+}

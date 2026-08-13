@@ -12,6 +12,9 @@ import programRoutes from './routes/programs.js';
 import registrationRoutes from './routes/registrations.js';
 import donationRoutes from './routes/donations.js';
 import analyticsRoutes from './routes/analytics.js';
+import platformRoutes from './routes/platform.js';
+import membershipRoutes from './routes/memberships.js';
+import notificationRoutes from './routes/notifications.js';
 
 export function buildServer() {
   const server = fastify({
@@ -44,6 +47,9 @@ export function buildServer() {
   server.register(registrationRoutes);
   server.register(donationRoutes);
   server.register(analyticsRoutes);
+  server.register(platformRoutes);
+  server.register(membershipRoutes);
+  server.register(notificationRoutes);
 
   return server;
 }

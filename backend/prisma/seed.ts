@@ -1,123 +1,49 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient(
+  process.env.DATABASE_URL
+    ? { datasources: { db: { url: process.env.DATABASE_URL } } }
+    : undefined
+);
 
 async function main() {
-  console.log('Starting database seeding...');
-
-  // Clean existing tables (Order matters due to foreign key cascades)
+  await prisma.auditEvent.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.registration.deleteMany();
   await prisma.program.deleteMany();
   await prisma.announcement.deleteMany();
   await prisma.donation.deleteMany();
+  await prisma.membership.deleteMany();
   await prisma.user.deleteMany();
   await prisma.mosque.deleteMany();
 
-  // 1. Create Mosque Tenants
-  const mosqueAlNoor = await prisma.mosque.create({
-    data: {
-      name: 'Al-Noor Central Masjid',
-      slug: 'al-noor',
-      address: '123 Islamic Center Ave, Cityville',
-      phone: '+2348031234567',
-      email: 'contact@alnoormasjid.org'
-    }
-  });
+  const [adminHash, memberHash, platformHash] = await Promise.all([
+    bcrypt.hash('adminPass123', 12), bcrypt.hash('memberPass123', 12), bcrypt.hash('platformPass123', 12)
+  ]);
+  const platformAdmin = await prisma.user.create({ data: { name: 'Platform Administrator', email: 'platform@masjidhub.local', password_hash: platformHash, platform_role: 'super_admin' } });
+  const alNoor = await prisma.mosque.create({ data: { name: 'Al-Noor Central Masjid', slug: 'al-noor', status: 'Active', address: '123 Islamic Center Ave, Cityville', phone: '+2348031234567', email: 'contact@alnoormasjid.org' } });
+  const alHuda = await prisma.mosque.create({ data: { name: 'Masjid Al-Huda', slug: 'al-huda', status: 'Active', address: '456 Guidance Road, Green Valley', phone: '+2348039876543', email: 'info@alhuda.org', brand_color: '#1d4ed8' } });
 
-  const mosqueAlHuda = await prisma.mosque.create({
-    data: {
-      name: 'Masjid Al-Huda',
-      slug: 'al-huda',
-      address: '456 Guidance Road, Green Valley',
-      phone: '+2348039876543',
-      email: 'info@alhuda.org'
-    }
-  });
+  const ahmad = await prisma.user.create({ data: { name: 'Imam Ahmad', email: 'ahmad@alnoor.org', password_hash: adminHash, phone: '+2348055555551' } });
+  const ali = await prisma.user.create({ data: { name: 'Ali Bello', email: 'ali@example.org', password_hash: memberHash, phone: '+2348055555552' } });
+  const yusuf = await prisma.user.create({ data: { name: 'Imam Yusuf', email: 'yusuf@alhuda.org', password_hash: adminHash } });
+  await prisma.membership.createMany({ data: [
+    { mosque_id: alNoor.mosque_id, user_id: ahmad.user_id, role: 'tenant_admin' },
+    { mosque_id: alNoor.mosque_id, user_id: ali.user_id, role: 'member' },
+    { mosque_id: alHuda.mosque_id, user_id: yusuf.user_id, role: 'tenant_admin' },
+    { mosque_id: alHuda.mosque_id, user_id: ali.user_id, role: 'member' }
+  ] });
 
-  console.log('Seeded Mosques.');
-
-  // 2. Create Users (Admins and Members)
-  const hashedAdminPassword = await bcrypt.hash('adminPass123', 10);
-  const hashedMemberPassword = await bcrypt.hash('memberPass123', 10);
-
-  // Al-Noor Users
-  const adminAlNoor = await prisma.user.create({
-    data: {
-      mosque_id: mosqueAlNoor.mosque_id,
-      name: 'Imam Ahmad',
-      email: 'ahmad@alnoor.org',
-      password_hash: hashedAdminPassword,
-      role: 'admin',
-      phone: '+2348055555551'
-    }
-  });
-
-  const memberAlNoor = await prisma.user.create({
-    data: {
-      mosque_id: mosqueAlNoor.mosque_id,
-      name: 'Ali Bello',
-      email: 'ali@alnoor.org',
-      password_hash: hashedMemberPassword,
-      role: 'member',
-      phone: '+2348055555552'
-    }
-  });
-
-  // Al-Huda Users
-  const adminAlHuda = await prisma.user.create({
-    data: {
-      mosque_id: mosqueAlHuda.mosque_id,
-      name: 'Imam Yusuf',
-      email: 'yusuf@alhuda.org',
-      password_hash: hashedAdminPassword,
-      role: 'admin',
-      phone: '+2348055555553'
-    }
-  });
-
-  console.log('Seeded Users.');
-
-  // 3. Seed Announcements
-  await prisma.announcement.createMany({
-    data: [
-      {
-        mosque_id: mosqueAlNoor.mosque_id,
-        admin_id: adminAlNoor.user_id,
-        title: 'Ramadan 2026 Announcement',
-        content: 'Taraweeh prayers will begin tonight immediately after Isha prayers at 8:45 PM.',
-        category: 'Urgent',
-        posted_at: new Date()
-      },
-      {
-        mosque_id: mosqueAlNoor.mosque_id,
-        admin_id: adminAlNoor.user_id,
-        title: 'Weekly Tajweed Class',
-        content: 'Join our Tajweed lessons every Saturday after Asr prayer in the main hall.',
-        category: 'Event',
-        posted_at: new Date()
-      },
-      {
-        mosque_id: mosqueAlHuda.mosque_id,
-        admin_id: adminAlHuda.user_id,
-        title: 'New Prayer Times Configured',
-        content: 'Please view the homepage for the updated prayer timetables for this month.',
-        category: 'General',
-        posted_at: new Date()
-      }
-    ]
-  });
-
-  console.log('Seeded Announcements.');
-  console.log('Seeding completed successfully!');
+  await prisma.announcement.createMany({ data: [
+    { mosque_id: alNoor.mosque_id, author_id: ahmad.user_id, title: 'Community food drive', content: 'Bring shelf-stable food to the collection point before Friday prayer.', category: 'Event', audience: 'Public' },
+    { mosque_id: alNoor.mosque_id, author_id: ahmad.user_id, title: 'Weekly Tajweed class', content: 'The class meets every Saturday after Asr in the learning hall.', category: 'Event', audience: 'Public' },
+    { mosque_id: alHuda.mosque_id, author_id: yusuf.user_id, title: 'Updated prayer timetable', content: 'The new monthly timetable is available from the mosque office.', category: 'General', audience: 'Public' }
+  ] });
+  const programme = await prisma.program.create({ data: { mosque_id: alNoor.mosque_id, title: 'Foundations of Tajweed', description: 'A four-week practical course for adult learners.', start_date: new Date('2026-09-05T16:00:00Z'), end_date: new Date('2026-09-26T18:00:00Z'), location: 'Learning Hall', max_capacity: 30 } });
+  await prisma.registration.create({ data: { mosque_id: alNoor.mosque_id, user_id: ali.user_id, program_id: programme.program_id } });
+  await prisma.donation.create({ data: { mosque_id: alNoor.mosque_id, user_id: ali.user_id, amount_minor: 2500000, currency: 'NGN', category: 'Sadaqah', method: 'Transfer', status: 'Completed', receipt_number: 'MH-SEED-001' } });
+  await prisma.auditEvent.create({ data: { actor_id: platformAdmin.user_id, action: 'seed.completed', target_type: 'Platform', summary: 'Demonstration environment seeded.' } });
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().finally(() => prisma.$disconnect());
