@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import type { Membership, Mosque } from '@prisma/client';
+import { SESSION_COOKIE_NAME } from './security.js';
 
 export interface JWTPayload {
   user_id: number;
@@ -16,6 +17,13 @@ declare module 'fastify' {
   interface FastifyRequest {
     tenant: Mosque;
     membership?: Membership;
+    authType?: 'cookie' | 'bearer';
+    cookies: Record<string, string | undefined>;
+  }
+
+  interface FastifyReply {
+    setCookie(name: string, value: string, options?: any): this;
+    clearCookie(name: string, options?: any): this;
   }
 
   interface FastifyInstance {
@@ -23,7 +31,11 @@ declare module 'fastify' {
     requireMembership: (roles?: string[]) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     adminOnly: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     platformOnly: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    audit: (request: FastifyRequest, action: string, targetType: string, targetId: string | number | null, summary: string) => Promise<void>;
+    audit: (request: FastifyRequest, action: string, targetType: string, targetId: string | number | null, summary: string, overrideMosqueId?: number | null) => Promise<void>;
+    createCsrfToken: () => string;
+    verifyCsrfToken: (token?: string) => boolean;
+    setAuthCookies: (reply: FastifyReply, token: string, csrfToken: string) => void;
+    clearAuthCookies: (reply: FastifyReply) => void;
   }
 }
 
@@ -33,18 +45,36 @@ async function authPlugin(fastify: FastifyInstance) {
     throw new Error('JWT_SECRET is required in production.');
   }
 
-  fastify.register(fastifyJwt, {
+  await fastify.register(fastifyJwt, {
     secret: secret || 'development-only-change-me',
     sign: { expiresIn: '8h' }
   });
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      await request.jwtVerify();
-      const payload = request.user as JWTPayload;
+      let token: string | undefined = request.cookies?.[SESSION_COOKIE_NAME];
+      if (token) {
+        request.authType = 'cookie';
+      } else if (request.headers.authorization) {
+        const parts = request.headers.authorization.split(' ');
+        if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+          token = parts[1];
+          request.authType = 'bearer';
+        }
+      }
+
+      if (!token) {
+        reply.status(401).send({ error: 'Unauthorized: Invalid or missing token.' });
+        return;
+      }
+
+      const payload = fastify.jwt.verify<JWTPayload>(token);
+      request.user = payload;
+
       const user = await fastify.prisma.user.findUnique({ where: { user_id: payload.user_id } });
       if (!user || user.account_status !== 'Active') {
         reply.status(401).send({ error: 'Account is unavailable.' });
+        return;
       }
     } catch {
       if (!reply.sent) reply.status(401).send({ error: 'Unauthorized: Invalid or missing token.' });
@@ -91,11 +121,11 @@ async function authPlugin(fastify: FastifyInstance) {
     }
   });
 
-  fastify.decorate('audit', async (request, action, targetType, targetId, summary) => {
+  fastify.decorate('audit', async (request, action, targetType, targetId, summary, overrideMosqueId) => {
     const payload = request.user as JWTPayload | undefined;
     await fastify.prisma.auditEvent.create({
       data: {
-        mosque_id: request.tenant?.mosque_id,
+        mosque_id: overrideMosqueId !== undefined ? overrideMosqueId : request.tenant?.mosque_id,
         actor_id: payload?.user_id,
         action,
         target_type: targetType,

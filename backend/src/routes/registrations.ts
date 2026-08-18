@@ -1,11 +1,18 @@
 import { FastifyInstance } from 'fastify';
 import { tenantHook } from '../middleware/tenantHook.js';
 import type { JWTPayload } from '../plugins/auth.js';
+import {
+  registrationProgramParamSchema,
+  attendanceCheckInSchema
+} from '../schemas/index.js';
 
 export default async function registrationRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', tenantHook);
 
-  fastify.post('/api/programs/:id/register', { preHandler: [fastify.requireMembership()] }, async (request, reply) => {
+  fastify.post('/api/programs/:id/register', {
+    schema: registrationProgramParamSchema,
+    preHandler: [fastify.requireMembership()]
+  }, async (request, reply) => {
     const programId = Number((request.params as { id: string }).id);
     if (!Number.isInteger(programId)) return reply.status(400).send({ error: 'Invalid programme ID.' });
     const payload = request.user as JWTPayload;
@@ -34,7 +41,10 @@ export default async function registrationRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post('/api/programs/:id/cancel', { preHandler: [fastify.requireMembership()] }, async (request, reply) => {
+  fastify.post('/api/programs/:id/cancel', {
+    schema: registrationProgramParamSchema,
+    preHandler: [fastify.requireMembership()]
+  }, async (request, reply) => {
     const programId = Number((request.params as { id: string }).id);
     const payload = request.user as JWTPayload;
     const registration = await fastify.prisma.registration.findUnique({ where: { mosque_id_user_id_program_id: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id, program_id: programId } } });
@@ -44,23 +54,37 @@ export default async function registrationRoutes(fastify: FastifyInstance) {
     reply.send(updated);
   });
 
-  fastify.get('/api/members/registrations', { preHandler: [fastify.requireMembership()] }, async (request, reply) => {
+  fastify.get('/api/members/registrations', {
+    preHandler: [fastify.requireMembership()]
+  }, async (request, reply) => {
     const payload = request.user as JWTPayload;
     reply.send(await fastify.prisma.registration.findMany({ where: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id }, include: { program: true }, orderBy: { reg_date: 'desc' } }));
   });
 
-  fastify.get('/api/admin/programs/:id/registrations', { preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])] }, async (request, reply) => {
+  fastify.get('/api/admin/programs/:id/registrations', {
+    schema: registrationProgramParamSchema,
+    preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])]
+  }, async (request, reply) => {
     const programId = Number((request.params as { id: string }).id);
     const program = await fastify.prisma.program.findFirst({ where: { program_id: programId, mosque_id: request.tenant.mosque_id } });
     if (!program) return reply.status(404).send({ error: 'Programme not found.' });
     reply.send(await fastify.prisma.registration.findMany({ where: { mosque_id: request.tenant.mosque_id, program_id: programId }, include: { user: { select: { user_id: true, name: true, email: true, phone: true } } } }));
   });
 
-  fastify.patch('/api/admin/registrations/:id/attendance', { preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])] }, async (request, reply) => {
+  fastify.patch('/api/admin/registrations/:id/attendance', {
+    schema: attendanceCheckInSchema,
+    preHandler: [fastify.requireMembership(['tenant_admin', 'programme_officer'])]
+  }, async (request, reply) => {
     const id = Number((request.params as { id: string }).id);
     const registration = await fastify.prisma.registration.findFirst({ where: { reg_id: id, mosque_id: request.tenant.mosque_id } });
     if (!registration) return reply.status(404).send({ error: 'Registration not found.' });
-    const updated = await fastify.prisma.registration.update({ where: { reg_id: id }, data: { status: 'Attended', attended_at: new Date() } });
+    const body = (request.body || {}) as { status?: 'Attended' | 'Registered' | 'Cancelled' };
+    const targetStatus = body.status || 'Attended';
+    const attendedAt = targetStatus === 'Attended' ? new Date() : (targetStatus === 'Registered' ? null : registration.attended_at);
+    const updated = await fastify.prisma.registration.update({
+      where: { reg_id: id },
+      data: { status: targetStatus, attended_at: attendedAt }
+    });
     await fastify.audit(request, 'attendance.recorded', 'Registration', id, 'Programme attendance recorded.');
     reply.send(updated);
   });

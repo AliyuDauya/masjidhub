@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 
 import dbPlugin from './plugins/db.js';
+import securityPlugin from './plugins/security.js';
 import authPlugin from './plugins/auth.js';
 import mosqueRoutes from './routes/mosques.js';
 import authRoutes from './routes/auth.js';
@@ -21,9 +22,49 @@ export function buildServer() {
     logger: true
   });
 
-  // Enable CORS
+  // Strict CORS configuration with credentials and dynamic origin resolution
+  const defaultAllowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000'
+  ];
+
+  const envOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+    : [];
+
+  const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envOrigins]));
+
   server.register(cors, {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: (origin, cb) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, fastify.inject tests)
+      if (!origin) {
+        return cb(null, true);
+      }
+
+      if (allowedOrigins.includes(origin) || (envOrigins.length === 1 && envOrigins[0] === '*')) {
+        return cb(null, true);
+      }
+
+      // Non-whitelisted origins: omit CORS headers
+      return cb(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Mosque-Slug',
+      'x-mosque-slug',
+      'X-CSRF-Token',
+      'x-csrf-token',
+      'Cookie',
+      'Accept',
+      'Origin'
+    ],
+    exposedHeaders: ['Set-Cookie', 'X-CSRF-Token'],
+    maxAge: 86400
   });
 
   // Enable Security Headers
@@ -35,8 +76,23 @@ export function buildServer() {
     timeWindow: '1 minute'
   });
 
-  // Register Prisma Database and Auth Plugins
+  // Centralized Fastify Validation Error Formatter
+  server.setErrorHandler((error, request, reply) => {
+    if (error.validation) {
+      const message = error.message || 'Request validation failed';
+      return reply.status(400).send({
+        statusCode: 400,
+        error: message,
+        message,
+        details: error.validation
+      });
+    }
+    reply.send(error);
+  });
+
+  // Register Plugins
   server.register(dbPlugin);
+  server.register(securityPlugin);
   server.register(authPlugin);
 
   // Register Domain Routes

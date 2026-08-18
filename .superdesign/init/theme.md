@@ -1,0 +1,162 @@
+# Theme & Design Tokens
+
+## Part 1: Compact Token Summary
+- **Background**: `#f7f5ef` (light mode), `#0f172a` (dark mode)
+- **Foreground / Text**: `#183044` (light mode), `#f8fafc` (dark mode)
+- **Primary Accent**: `#087f5b` (Emerald), `#066748` (hover), `#dcefe7` (light tint)
+- **Secondary / Accent**: `#d89b2b` (Warm Amber), `#b45309` (hover)
+- **Card Background**: `#ffffff` (light), `#1e293b` (dark)
+- **Card Border**: `#e2e8f0` (light), `#334155` (dark)
+- **Muted Text**: `#64748b` (light), `#94a3b8` (dark)
+- **Border Radius**: `12px` (standard), `8px` (inputs & buttons)
+- **Typography**:
+  - Headings: `Lora`, Georgia, serif
+  - Body: `Inter`, system-ui, sans-serif
+  - Monospace / Eyebrow: `Geist Mono`, monospace
+- **Shadows**:
+  - Regular: `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)`
+  - Large: `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)`
+
+## Part 2: Raw Source Dump (`frontend/src/app/globals.css`)
+```css
+@import "tailwindcss";
+
+:root {
+  --background: #f7f5ef;
+  --foreground: #183044;
+  --primary: #087f5b;
+  --primary-hover: #066748;
+  --primary-light: #dcefe7;
+  --accent: #d89b2b;
+  --accent-hover: #b45309; /* Amber 700 */
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --text-muted: #64748b;
+  --error: #ef4444;
+  --success: #10b981;
+  --border-radius: 12px;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f172a; /* Slate 900 */
+    --foreground: #f8fafc; /* Slate 50 */
+    --card-bg: #1e293b; /* Slate 800 */
+    --card-border: #334155; /* Slate 700 */
+    --primary-light: #064e3b; /* Dark Emerald */
+    --text-muted: #94a3b8; /* Slate 400 */
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  transition: var(--transition);
+}
+
+h1, h2, h3 { font-family: var(--font-lora), Georgia, serif; letter-spacing: -0.025em; }
+
+.tenant-band { border-top: 4px solid var(--tenant-color, var(--primary)); background: linear-gradient(90deg, color-mix(in srgb, var(--tenant-color, var(--primary)) 10%, white), var(--card-bg) 45%); }
+.eyebrow { font: 700 .7rem/1 var(--font-geist-mono), monospace; letter-spacing: .13em; text-transform: uppercase; color: var(--primary); }
+
+.masjid-gradient-bg {
+  background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
+}
+
+.card-premium {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.card-premium:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--border-radius);
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--foreground);
+  outline: none;
+  font-size: 0.95rem;
+  transition: var(--transition);
+}
+
+.input-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.input-field:focus-visible, .btn-primary:focus-visible, .btn-secondary:focus-visible, a:focus-visible, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 70%, white); outline-offset: 3px; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  background-color: transparent;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+.btn-secondary:hover {
+  background-color: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+```

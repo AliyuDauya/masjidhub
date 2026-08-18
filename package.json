@@ -4,9 +4,11 @@
   "private": true,
   "description": "Unified multi-tenant administrative ecosystem for mosques",
   "scripts": {
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
     "test:backend": "npm --prefix backend test",
     "test:frontend": "npm --prefix frontend test",
     "test": "npm --prefix backend test && npm --prefix frontend test",
+    "test:e2e": "npm --prefix backend run test:e2e",
     "test:logic": "npm --prefix backend run test:node && npm --prefix frontend run test:node",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",

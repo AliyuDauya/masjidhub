@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "test": "vitest run",
+    "test:e2e": "vitest run test/e2e",
     "test:node": "node test/standalone_runner.js",
     "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",

@@ -11,10 +11,10 @@ describe('current mosque onboarding interface', () => {
   it('loads the real directory endpoint and opens a complete tenant application', async () => {
     render(<GlobalLandingPage />);
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/mosques'), expect.any(Object)));
-    fireEvent.click(screen.getByRole('button', { name: 'Register Mosque' }));
-    expect(screen.getByText('Register Your Mosque')).toBeDefined();
-    expect(screen.getByPlaceholderText('Administrator full name')).toBeDefined();
-    expect(screen.getByPlaceholderText('Administrator sign-in email')).toBeDefined();
-    expect(screen.getByPlaceholderText('Password (at least 8 characters)')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: /register mosque/i }));
+    expect(screen.getByText(/register your mosque/i)).toBeDefined();
+    expect(screen.getByPlaceholderText(/administrator full name/i)).toBeDefined();
+    expect(screen.getByPlaceholderText(/administrator sign-in email/i)).toBeDefined();
+    expect(screen.getByPlaceholderText(/password \(at least 8 characters\)/i)).toBeDefined();
   });
 });

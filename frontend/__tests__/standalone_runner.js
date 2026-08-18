@@ -130,4 +130,52 @@ describe('MasjidHub Frontend Logic & Interactive Workflow Verification', () => {
       assert.strictEqual(percentage, '51.5');
     });
   });
+
+  describe('Frontend API Client Session & CSRF Integration Logic', () => {
+    function getCsrfTokenFromCookie(cookieStr, localStorageStore) {
+      const match = cookieStr ? cookieStr.match(/(?:^|;\s*)mh_csrf=([^;]+)/) : null;
+      if (match && match[1]) return decodeURIComponent(match[1]);
+      return localStorageStore ? localStorageStore['masjidhub:csrf_token'] || null : null;
+    }
+
+    function buildHeaders(method, token, csrfToken) {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+      if (isMutation && csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      return headers;
+    }
+
+    it('should extract CSRF token from mh_csrf cookie when available', () => {
+      const cookieStr = 'other=val; mh_csrf=authentic-csrf-token-123; session=xyz';
+      const token = getCsrfTokenFromCookie(cookieStr, {});
+      assert.strictEqual(token, 'authentic-csrf-token-123');
+    });
+
+    it('should fallback to localStorage when mh_csrf cookie is not set', () => {
+      const localStorageStore = { 'masjidhub:csrf_token': 'ls-csrf-token-456' };
+      const token = getCsrfTokenFromCookie('', localStorageStore);
+      assert.strictEqual(token, 'ls-csrf-token-456');
+    });
+
+    it('should attach X-CSRF-Token header on mutation methods (POST, PUT, PATCH, DELETE)', () => {
+      const csrf = 'my-csrf-token';
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        const headers = buildHeaders(method, 'jwt-token', csrf);
+        assert.strictEqual(headers['X-CSRF-Token'], csrf);
+        assert.strictEqual(headers['Authorization'], 'Bearer jwt-token');
+      }
+    });
+
+    it('should NOT attach X-CSRF-Token header on safe read methods (GET, OPTIONS)', () => {
+      const csrf = 'my-csrf-token';
+      for (const method of ['GET', 'OPTIONS', 'HEAD']) {
+        const headers = buildHeaders(method, 'jwt-token', csrf);
+        assert.strictEqual(headers['X-CSRF-Token'], undefined);
+      }
+    });
+  });
 });
+

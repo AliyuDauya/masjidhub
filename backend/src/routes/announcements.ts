@@ -1,5 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { tenantHook } from '../middleware/tenantHook.js';
+import {
+  createAnnouncementSchema,
+  updateAnnouncementSchema,
+  announcementIdParamSchema
+} from '../schemas/index.js';
 
 interface AnnouncementBody {
   title: string;
@@ -48,6 +53,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // POST /api/admin/announcements - Create new announcement (restricted to Mosque Admin)
   fastify.post('/api/admin/announcements', {
+    schema: createAnnouncementSchema,
     preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { title, content, category, expiry_date, audience = 'Public', status = 'Published', publish_at } = request.body as AnnouncementBody;
@@ -88,6 +94,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // PUT /api/admin/announcements/:id - Update announcement details
   fastify.put('/api/admin/announcements/:id', {
+    schema: updateAnnouncementSchema,
     preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
@@ -133,6 +140,7 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
 
   // DELETE /api/admin/announcements/:id - Delete announcement
   fastify.delete('/api/admin/announcements/:id', {
+    schema: announcementIdParamSchema,
     preHandler: [fastify.requireMembership(['tenant_admin', 'communications_officer'])]
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };

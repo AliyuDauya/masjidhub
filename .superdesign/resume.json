@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/": {
+      "targetKind": "super-travel-luxury",
+      "projectId": "71de7188-bdc2-44b9-b045-5aa0b17cedcd",
+      "activeDraftId": "6c80a527-30d7-4fa9-a54b-2dee465ec4fc",
+      "designSystemPath": ".superdesign/design-system.md",
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "5262EF25BA932C4D53B76C2DEA602C40FE9B03322DCD5473D0C5D629D2B92FC1"
+      },
+      "components": [],
+      "drafts": {
+        "6c80a527-30d7-4fa9-a54b-2dee465ec4fc": {
+          "title": "Super Travel Luxury Editorial Design",
+          "visualDirection": "super travel / league spartan / #e4a4bd dusty rose / staggered grid",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-13T22:52:00Z"
+    }
+  }
+}
