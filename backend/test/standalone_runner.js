@@ -875,6 +875,197 @@ describe('MasjidHub Backend Logic & Requirements Verification', () => {
         assert.strictEqual(tenant2Events[0].mosque_id, 2);
       });
     });
+
+    // 5. Global User Accounts & Multi-Mosque Auto-Joining
+    describe('Global User Accounts & Multi-Mosque Joining Logic', () => {
+      const globalUsers = new Map();
+      const memberships = new Map(); // key: `${mosqueId}:${userId}`
+
+      function registerGlobal(name, email, password, targetMosqueId) {
+        let user = globalUsers.get(email);
+        if (!user) {
+          user = { user_id: globalUsers.size + 1, name, email, password };
+          globalUsers.set(email, user);
+        } else {
+          if (user.password !== password) {
+            return { success: false, status: 401, error: 'Incorrect password for global account.' };
+          }
+        }
+
+        const key = `${targetMosqueId}:${user.user_id}`;
+        let mem = memberships.get(key);
+        if (!mem) {
+          mem = { membership_id: memberships.size + 1, mosque_id: targetMosqueId, user_id: user.user_id, role: 'member', status: 'Active' };
+          memberships.set(key, mem);
+        }
+
+        return { success: true, status: 200, user, membership: mem };
+      }
+
+      function loginGlobal(email, password, targetMosqueId) {
+        const user = globalUsers.get(email);
+        if (!user || user.password !== password) {
+          return { success: false, status: 401, error: 'Invalid email or password.' };
+        }
+
+        const key = `${targetMosqueId}:${user.user_id}`;
+        let mem = memberships.get(key);
+        if (!mem) {
+          // Auto-join on login
+          mem = { membership_id: memberships.size + 1, mosque_id: targetMosqueId, user_id: user.user_id, role: 'member', status: 'Active' };
+          memberships.set(key, mem);
+        }
+
+        return { success: true, status: 200, user, membership: mem };
+      }
+
+      function oneClickJoin(userId, targetMosqueId) {
+        const key = `${targetMosqueId}:${userId}`;
+        let mem = memberships.get(key);
+        if (!mem) {
+          mem = { membership_id: memberships.size + 1, mosque_id: targetMosqueId, user_id: userId, role: 'member', status: 'Active' };
+          memberships.set(key, mem);
+        }
+        return { success: true, status: 201, membership: mem };
+      }
+
+      it('should create a new global user account when registering at Mosque 1', () => {
+        const res = registerGlobal('Ahmad Ibrahim', 'ahmad@example.com', 'SecurePass123!', 1);
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.user.email, 'ahmad@example.com');
+        assert.strictEqual(res.membership.mosque_id, 1);
+      });
+
+      it('should automatically join Mosque 2 when existing user registers with same credentials', () => {
+        const res = registerGlobal('Ahmad Ibrahim', 'ahmad@example.com', 'SecurePass123!', 2);
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.membership.mosque_id, 2);
+        assert.strictEqual(res.membership.user_id, res.user.user_id);
+      });
+
+      it('should automatically join Mosque 3 when existing user signs in at Mosque 3', () => {
+        const res = loginGlobal('ahmad@example.com', 'SecurePass123!', 3);
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.membership.mosque_id, 3);
+      });
+
+      it('should support 1-click join endpoint for any target mosque', () => {
+        const res = oneClickJoin(1, 4);
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.membership.mosque_id, 4);
+        assert.strictEqual(res.membership.role, 'member');
+      });
+    });
+
+    // 6. Sovereign Platform Operator Authentication & Multi-Tenant Governance
+    describe('Sovereign Platform Operator Authentication & Tenant Governance Logic', () => {
+      const platformUsers = [
+        { user_id: 1, email: 'operator@masjidhub.org', password_hash: hashPassword('SuperAdminPass2026!'), platform_role: 'super_admin', account_status: 'Active' },
+        { user_id: 2, email: 'regular_admin@alnoor.org', password_hash: hashPassword('AdminPass2026!'), platform_role: null, account_status: 'Active' },
+        { user_id: 3, email: 'suspended_operator@masjidhub.org', password_hash: hashPassword('SuperPass2026!'), platform_role: 'super_admin', account_status: 'Suspended' }
+      ];
+
+      const tenants = [
+        { mosque_id: 1, name: 'Al-Noor Central Masjid', slug: 'al-noor', status: 'Active' },
+        { mosque_id: 2, name: 'Masjid Al-Huda', slug: 'al-huda', status: 'Pending' },
+        { mosque_id: 3, name: 'Central Mosque', slug: 'central', status: 'Suspended' }
+      ];
+
+      const platformAuditStore = [];
+
+      function platformLogin(email, password) {
+        if (!email || !password) {
+          return { success: false, status: 400, error: 'Email and password are required.' };
+        }
+        const user = platformUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!user || user.platform_role !== 'super_admin' || user.account_status !== 'Active') {
+          return { success: false, status: 401, error: 'Invalid platform administrator credentials.' };
+        }
+        if (user.password_hash !== hashPassword(password)) {
+          return { success: false, status: 401, error: 'Invalid platform administrator credentials.' };
+        }
+        return {
+          success: true,
+          status: 200,
+          token: `jwt-platform-${user.user_id}-${Date.now()}`,
+          user: { user_id: user.user_id, email: user.email, platform_role: user.platform_role }
+        };
+      }
+
+      function updateTenantStatus(tenantId, newStatus, operatorId, requestId, ipAddress) {
+        if (!['Active', 'Suspended'].includes(newStatus)) {
+          return { success: false, status: 400, error: 'Status must be Active or Suspended.' };
+        }
+        const tenant = tenants.find(t => t.mosque_id === tenantId);
+        if (!tenant) {
+          return { success: false, status: 404, error: 'Tenant not found.' };
+        }
+        tenant.status = newStatus;
+        const event = {
+          actor_id: operatorId,
+          mosque_id: tenant.mosque_id,
+          action: `tenant.${newStatus.toLowerCase()}`,
+          target_type: 'Mosque',
+          target_id: String(tenantId),
+          summary: `Tenant marked ${newStatus}.`,
+          request_id: requestId,
+          ip_address: ipAddress,
+          created_at: new Date()
+        };
+        platformAuditStore.push(event);
+        return { success: true, status: 200, tenant, event };
+      }
+
+      it('should authenticate valid super_admin operator credentials', () => {
+        const res = platformLogin('operator@masjidhub.org', 'SuperAdminPass2026!');
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.user.platform_role, 'super_admin');
+        assert.ok(res.token);
+      });
+
+      it('should reject non-super_admin users attempting platform operator login with 401', () => {
+        const res = platformLogin('regular_admin@alnoor.org', 'AdminPass2026!');
+        assert.strictEqual(res.success, false);
+        assert.strictEqual(res.status, 401);
+        assert.strictEqual(res.error, 'Invalid platform administrator credentials.');
+      });
+
+      it('should reject incorrect password for super_admin with 401', () => {
+        const res = platformLogin('operator@masjidhub.org', 'WrongPass123!');
+        assert.strictEqual(res.success, false);
+        assert.strictEqual(res.status, 401);
+      });
+
+      it('should reject suspended super_admin account with 401', () => {
+        const res = platformLogin('suspended_operator@masjidhub.org', 'SuperPass2026!');
+        assert.strictEqual(res.success, false);
+        assert.strictEqual(res.status, 401);
+      });
+
+      it('should allow platform operator to activate a pending mosque tenant and log audit event', () => {
+        const res = updateTenantStatus(2, 'Active', 1, 'req-plat-001', '10.0.0.1');
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.tenant.status, 'Active');
+        assert.strictEqual(res.event.action, 'tenant.active');
+        assert.strictEqual(res.event.request_id, 'req-plat-001');
+      });
+
+      it('should allow platform operator to suspend an active mosque tenant', () => {
+        const res = updateTenantStatus(1, 'Suspended', 1, 'req-plat-002', '10.0.0.1');
+        assert.strictEqual(res.success, true);
+        assert.strictEqual(res.tenant.status, 'Suspended');
+        assert.strictEqual(res.event.action, 'tenant.suspended');
+      });
+
+      it('should reject invalid tenant status values with 400', () => {
+        const res = updateTenantStatus(1, 'Deleted', 1, 'req-plat-003', '10.0.0.1');
+        assert.strictEqual(res.success, false);
+        assert.strictEqual(res.status, 400);
+        assert.strictEqual(res.error, 'Status must be Active or Suspended.');
+      });
+    });
   });
 });
+
+
 

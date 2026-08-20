@@ -41,23 +41,51 @@ export default async function platformRoutes(fastify: FastifyInstance) {
     schema: updateTenantStatusSchema,
     preHandler: [fastify.platformOnly]
   }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { status } = request.body as { status?: string };
-    if (!['Active', 'Suspended'].includes(status || '')) return reply.status(400).send({ error: 'Status must be Active or Suspended.' });
-    const mosque = await fastify.prisma.mosque.update({ where: { mosque_id: Number(id) }, data: { status } });
-    await fastify.prisma.auditEvent.create({
-      data: {
-        actor_id: (request.user as { user_id: number }).user_id,
-        mosque_id: mosque.mosque_id,
-        action: `tenant.${status!.toLowerCase()}`,
-        target_type: 'Mosque',
-        target_id: id,
-        summary: `Tenant marked ${status}.`,
-        request_id: request.id,
-        ip_address: request.ip
+    try {
+      const { id } = request.params as { id: string | number };
+      const { status } = request.body as { status?: string };
+      if (!['Active', 'Suspended'].includes(status || '')) {
+        return reply.status(400).send({ error: 'Status must be Active or Suspended.' });
       }
-    });
-    reply.send(mosque);
+
+      const mosqueId = Number(id);
+      if (isNaN(mosqueId)) {
+        return reply.status(400).send({ error: 'Invalid mosque ID.' });
+      }
+
+      const existingMosque = await fastify.prisma.mosque.findUnique({ where: { mosque_id: mosqueId } });
+      if (!existingMosque) {
+        return reply.status(404).send({ error: 'Mosque tenant not found.' });
+      }
+
+      const mosque = await fastify.prisma.mosque.update({
+        where: { mosque_id: mosqueId },
+        data: { status }
+      });
+
+      const actorId = (request.user as { user_id?: number })?.user_id;
+      const actor = actorId ? await fastify.prisma.user.findUnique({ where: { user_id: actorId } }) : null;
+
+      await fastify.prisma.auditEvent.create({
+        data: {
+          actor_id: actor ? actor.user_id : null,
+          mosque_id: mosque.mosque_id,
+          action: `tenant.${status!.toLowerCase()}`,
+          target_type: 'Mosque',
+          target_id: String(mosqueId),
+          summary: `Tenant ${mosque.name} marked as ${status}.`,
+          request_id: request.id || null,
+          ip_address: request.ip || null
+        }
+      }).catch((auditErr) => {
+        request.log.warn({ err: auditErr }, 'Failed to create audit event for tenant status update');
+      });
+
+      return reply.send(mosque);
+    } catch (err: any) {
+      request.log.error({ err }, 'Error updating tenant status');
+      return reply.status(500).send({ error: err?.message || 'Failed to update tenant status.' });
+    }
   });
 
   fastify.get('/api/platform/metrics', { preHandler: [fastify.platformOnly] }, async (_request, reply) => {

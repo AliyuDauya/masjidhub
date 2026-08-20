@@ -13,12 +13,18 @@ interface MosqueMock {
 export default function MasjidHubLuxuryLandingPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedMosqueSlug, setSelectedMosqueSlug] = useState('al-noor');
   const [mosques, setMosques] = useState<MosqueMock[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Mosque Registration Form State
+  const [modalRegisterMode, setModalRegisterMode] = useState<'user' | 'mosque'>('user');
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [selectedUserMosque, setSelectedUserMosque] = useState('al-noor');
+
   const [newMosqueName, setNewMosqueName] = useState('');
   const [newMosqueSlug, setNewMosqueSlug] = useState('');
   const [newMosqueAddress, setNewMosqueAddress] = useState('');
@@ -96,6 +102,40 @@ export default function MasjidHubLuxuryLandingPage() {
       m.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (m.address && m.address.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const handleUserRegisterModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!userName.trim() || !userEmail.trim() || !userPassword) {
+      setErrorMsg('Please fill in your name, email, and password.');
+      return;
+    }
+    if (userPassword.length < 8) {
+      setErrorMsg('Password must be at least 8 characters.');
+      return;
+    }
+
+    try {
+      const targetSlug = selectedUserMosque || 'al-noor';
+      await api(targetSlug, '/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: userName.trim(),
+          email: userEmail.trim(),
+          password: userPassword,
+          phone: userPhone.trim() || undefined
+        })
+      });
+      setSuccessMsg(`Global account registered and joined ${targetSlug} congregation.`);
+      setTimeout(() => {
+        window.location.href = `/mosque/${targetSlug}/dashboard`;
+      }, 1200);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'User registration failed.');
+    }
+  };
 
   const handleRegisterMosque = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,12 +244,12 @@ export default function MasjidHubLuxuryLandingPage() {
 
           {/* Header Action Buttons */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowLoginModal(true)}
+            <Link
+              href="/login"
               className="text-[10px] font-black uppercase tracking-menu text-[#0d4734] hover:text-[#c89b3c] px-3 py-2 transition-colors hidden sm:inline-block"
             >
               LOGIN
-            </button>
+            </Link>
             <button
               onClick={() => setShowRegisterModal(true)}
               className="btn-pill-cta"
@@ -248,12 +288,12 @@ export default function MasjidHubLuxuryLandingPage() {
               >
                 REGISTER MOSQUE
               </button>
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="btn-pill-secondary py-3.5 px-8 text-xs tracking-ultra-wide"
+              <Link
+                href="/login"
+                className="btn-pill-secondary py-3.5 px-8 text-xs tracking-ultra-wide text-center"
               >
                 SIGN IN
-              </button>
+              </Link>
             </div>
 
             {/* Quick Search & Explore CTA */}
@@ -509,12 +549,12 @@ export default function MasjidHubLuxuryLandingPage() {
                 >
                   REGISTER YOUR MOSQUE
                 </button>
-                <button
-                  onClick={() => setShowLoginModal(true)}
-                  className="btn-pill-secondary"
+                <Link
+                  href="/login"
+                  className="btn-pill-secondary text-center"
                 >
                   SIGN IN
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -566,8 +606,8 @@ export default function MasjidHubLuxuryLandingPage() {
                     </Link>
                   </li>
                   <li>
-                    <Link href="/mosque/al-noor/login" className="text-[10px] font-black uppercase tracking-menu text-[#1c2421] hover:text-[#c89b3c] hover:translate-x-1 inline-block transition-transform">
-                      Member Sign In
+                    <Link href="/login" className="text-[10px] font-black uppercase tracking-menu text-[#1c2421] hover:text-[#c89b3c] hover:translate-x-1 inline-block transition-transform">
+                      Member & Admin Sign In
                     </Link>
                   </li>
                   <li>
@@ -614,42 +654,141 @@ export default function MasjidHubLuxuryLandingPage() {
         </div>
       </footer>
 
-      {/* Login Portal Selection Modal */}
-      {showLoginModal && (
+      {/* Onboarding Register Modal */}
+      {showRegisterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-[#fcfbfa] max-w-md w-full p-8 rounded-[16px] border-2 border-[#c89b3c]/30 shadow-2xl relative">
+          <div className="bg-[#fcfbfa] max-w-xl w-full p-8 md:p-10 rounded-[16px] border-2 border-[#c89b3c]/30 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
             <button
-              onClick={() => setShowLoginModal(false)}
+              onClick={() => setShowRegisterModal(false)}
               className="absolute top-6 right-6 text-xs font-black uppercase tracking-widest text-[#1c2421]/60 hover:text-[#1c2421]"
             >
               [CLOSE ×]
             </button>
 
-            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-2">
-              AUTHENTICATION GATEWAY
-            </span>
-            <h3 className="text-3xl font-black uppercase tracking-tighter mb-4 text-[#0d4734]">
-              SIGN IN TO PORTAL
-            </h3>
-            <p className="text-xs text-[#1c2421]/70 leading-relaxed mb-6">
-              Choose your destination portal to sign in as a community member, mosque admin, or platform operator.
-            </p>
+            <div className="text-center">
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                MASJIDHUB ACCESS PORTAL
+              </span>
+              <h3 className="text-3xl font-black uppercase tracking-tighter text-[#0d4734]">
+                {modalRegisterMode === 'user' ? 'JOIN AS A MEMBER' : 'REGISTER A MOSQUE'}
+              </h3>
+            </div>
 
-            <div className="space-y-4">
-              {/* Member Sign In */}
-              <div className="p-4 border border-[#c89b3c]/30 rounded-[8px] bg-white hover:border-[#0d4734] transition-colors">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734]">
-                    COMMUNITY MEMBER
-                  </span>
-                  <span className="text-xs text-[#c89b3c]">✦</span>
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 p-1 bg-[#f6f3eb] rounded-[10px] border border-[#c89b3c]/25">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalRegisterMode('user');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
+                className={`py-2 px-3 text-xs font-black uppercase tracking-wider rounded-[8px] transition-all ${
+                  modalRegisterMode === 'user'
+                    ? 'bg-[#0d4734] text-white shadow-md'
+                    : 'text-[#1c2421]/60 hover:text-[#0d4734]'
+                }`}
+              >
+                👤 Register as User
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalRegisterMode('mosque');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
+                className={`py-2 px-3 text-xs font-black uppercase tracking-wider rounded-[8px] transition-all ${
+                  modalRegisterMode === 'mosque'
+                    ? 'bg-[#0d4734] text-white shadow-md'
+                    : 'text-[#1c2421]/60 hover:text-[#0d4734]'
+                }`}
+              >
+                🕌 Register as Mosque
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold uppercase rounded-[6px]">
+                {errorMsg}
+              </div>
+            )}
+
+            {successMsg ? (
+              <div className="p-6 bg-[#e4efe9] border border-[#0d4734] rounded-[8px] text-center space-y-2">
+                <p className="font-black text-sm uppercase tracking-wide text-[#0d4734]">
+                  Registration Successful
+                </p>
+                <p className="text-xs text-[#1c2421]/75">
+                  {successMsg}
+                </p>
+              </div>
+            ) : modalRegisterMode === 'user' ? (
+              /* USER REGISTRATION FORM */
+              <form onSubmit={handleUserRegisterModal} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Full Legal Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="E.G. AHMAD ALI"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                  />
                 </div>
-                <div className="flex items-center gap-2 mb-3">
-                  <label className="text-[10px] font-bold text-[#1c2421]/60">Select Mosque:</label>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Email Address (Global Account) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="NAME@EXAMPLE.COM"
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#c89b3c]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Create Password (Min. 8 Characters) *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#c89b3c]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+234 800 000 0000"
+                    value={userPhone}
+                    onChange={(e) => setUserPhone(e.target.value)}
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#c89b3c]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Primary Mosque Congregation
+                  </label>
                   <select
-                    value={selectedMosqueSlug}
-                    onChange={(e) => setSelectedMosqueSlug(e.target.value)}
-                    className="text-xs font-bold bg-[#f6f3eb] px-2 py-1 rounded border border-[#c89b3c]/30 focus:outline-none"
+                    value={selectedUserMosque}
+                    onChange={(e) => setSelectedUserMosque(e.target.value)}
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   >
                     {mosques.map((m) => (
                       <option key={m.slug} value={m.slug}>
@@ -658,94 +797,22 @@ export default function MasjidHubLuxuryLandingPage() {
                     ))}
                   </select>
                 </div>
-                <Link
-                  href={`/mosque/${selectedMosqueSlug}/login`}
-                  className="btn-pill-cta w-full py-2.5 text-[9px] tracking-ultra-wide text-center"
-                >
-                  ENTER MEMBER SIGN IN &rarr;
-                </Link>
-              </div>
 
-              {/* Mosque Administrator Dashboard */}
-              <div className="p-4 border border-[#c89b3c]/30 rounded-[8px] bg-white hover:border-[#0d4734] transition-colors">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734]">
-                    MOSQUE LEADERSHIP / ADMIN
-                  </span>
-                  <span className="text-xs text-[#c89b3c]">❖</span>
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="btn-pill-cta w-full py-3.5 tracking-ultra-wide"
+                  >
+                    CREATE USER ACCOUNT &rarr;
+                  </button>
                 </div>
-                <p className="text-[11px] text-[#1c2421]/70 mb-3">
-                  Manage prayer times, noticeboards, and donations for your local mosque.
-                </p>
-                <Link
-                  href={`/mosque/${selectedMosqueSlug}/admin`}
-                  className="btn-pill-secondary w-full py-2.5 text-[9px] tracking-ultra-wide text-center"
-                >
-                  ACCESS MOSQUE ADMIN &rarr;
-                </Link>
-              </div>
-
-              {/* Platform Super-Admin */}
-              <div className="p-4 border border-[#c89b3c]/30 rounded-[8px] bg-white hover:border-[#0d4734] transition-colors">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
-                    PLATFORM OPERATOR
-                  </span>
-                  <span className="text-xs text-[#0d4734]">◈</span>
-                </div>
-                <p className="text-[11px] text-[#1c2421]/70 mb-3">
-                  Approve new mosque tenant applications and oversee network availability.
-                </p>
-                <Link
-                  href="/platform"
-                  className="btn-pill-gold w-full py-2.5 text-[9px] tracking-ultra-wide text-center"
-                >
-                  OPEN PLATFORM CONSOLE &rarr;
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Onboarding Register Modal */}
-      {showRegisterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-[#fcfbfa] max-w-lg w-full p-10 rounded-[16px] border-2 border-[#c89b3c]/30 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowRegisterModal(false)}
-              className="absolute top-6 right-6 text-xs font-black uppercase tracking-widest text-[#1c2421]/60 hover:text-[#1c2421]"
-            >
-              [CLOSE ×]
-            </button>
-
-            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-2">
-              01 / ONBOARDING DISPATCH
-            </span>
-            <h3 className="text-3xl font-black uppercase tracking-tighter mb-6 text-[#0d4734]">
-              REGISTER YOUR MOSQUE
-            </h3>
-
-            {errorMsg && (
-              <div className="p-4 mb-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold uppercase rounded-[6px]">
-                {errorMsg}
-              </div>
-            )}
-
-            {successMsg ? (
-              <div className="p-6 bg-[#e4efe9] border border-[#0d4734] rounded-[8px] text-center space-y-2">
-                <p className="font-black text-sm uppercase tracking-wide text-[#0d4734]">
-                  Application Received
-                </p>
-                <p className="text-xs text-[#1c2421]/75">
-                  {successMsg}
-                </p>
-              </div>
+              </form>
             ) : (
-              <form onSubmit={handleRegisterMosque} className="space-y-5">
+              /* MOSQUE REGISTRATION FORM */
+              <form onSubmit={handleRegisterMosque} className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                    Mosque Legal Entity Name
+                    Mosque Legal Entity Name *
                   </label>
                   <input
                     type="text"
@@ -758,14 +825,14 @@ export default function MasjidHubLuxuryLandingPage() {
                         setNewMosqueSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-'));
                       }
                     }}
-                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                      Portal Slug
+                      Portal Slug *
                     </label>
                     <input
                       type="text"
@@ -773,7 +840,7 @@ export default function MasjidHubLuxuryLandingPage() {
                       placeholder="al-noor"
                       value={newMosqueSlug}
                       onChange={(e) => setNewMosqueSlug(e.target.value)}
-                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-mono font-bold text-[#0d4734] focus:outline-none focus:border-[#c89b3c]"
                     />
                   </div>
                   <div>
@@ -782,11 +849,10 @@ export default function MasjidHubLuxuryLandingPage() {
                     </label>
                     <input
                       type="email"
-                      required
                       placeholder="INFO@MOSQUE.ORG"
                       value={newMosqueEmail}
                       onChange={(e) => setNewMosqueEmail(e.target.value)}
-                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
                     />
                   </div>
                 </div>
@@ -800,14 +866,14 @@ export default function MasjidHubLuxuryLandingPage() {
                     placeholder="123 MAIN ST, LONDON"
                     value={newMosqueAddress}
                     onChange={(e) => setNewMosqueAddress(e.target.value)}
-                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                      Lead Admin Name
+                      Lead Admin Name *
                     </label>
                     <input
                       type="text"
@@ -815,12 +881,12 @@ export default function MasjidHubLuxuryLandingPage() {
                       placeholder="Administrator full name"
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
-                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                      Admin Email
+                      Admin Email *
                     </label>
                     <input
                       type="email"
@@ -828,14 +894,14 @@ export default function MasjidHubLuxuryLandingPage() {
                       placeholder="Administrator sign-in email"
                       value={adminEmail}
                       onChange={(e) => setAdminEmail(e.target.value)}
-                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                      className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#c89b3c]"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                    Password
+                    Admin Password *
                   </label>
                   <input
                     type="password"
@@ -843,16 +909,16 @@ export default function MasjidHubLuxuryLandingPage() {
                     placeholder="Password (at least 8 characters)"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2.5 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
+                    className="w-full bg-transparent border-b border-[#c89b3c]/30 py-2 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-[#c89b3c]"
                   />
                 </div>
 
-                <div className="pt-4">
+                <div className="pt-2">
                   <button
                     type="submit"
-                    className="btn-pill-cta w-full py-4 tracking-ultra-wide"
+                    className="btn-pill-cta w-full py-3.5 tracking-ultra-wide"
                   >
-                    TRANSMIT MOSQUE APPLICATION &rarr;
+                    ONBOARD MOSQUE TENANT &rarr;
                   </button>
                 </div>
               </form>

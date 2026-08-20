@@ -1,47 +1,50 @@
 # Original User Request
 
-## Initial Request — 2026-08-16T15:44:51Z
+## Initial Request — 2026-08-20T13:35:55Z
 
-You are the Project Orchestrator for MasjidHub.
+MasjidHub Login Interface Restructuring into 3 Dedicated Role-Based Portal Sections (Member/Worshipper, Mosque Admin/Imam, Platform Operator) and Continued Platform Development.
 
-Your working directory is: `C:\Users\abdoulaahmad\Documents\masjidhub\masjidhub\.agents\orchestrator`
-The project root is: `C:\Users\abdoulaahmad\Documents\masjidhub\masjidhub`
-The authoritative user request is located at: `C:\Users\abdoulaahmad\Documents\masjidhub\masjidhub\.agents\ORIGINAL_REQUEST.md`
+Working directory: C:\Users\abdoulaahmad\Documents\masjidhub\masjidhub
+Integrity mode: development
 
-## Mission & Requirements
-MasjidHub is a sovereign multi-tenant administrative platform for mosques built with Fastify, Prisma/SQLite, and Next.js. You are leading the full end-to-end implementation and verification of:
+## Requirements
 
-### R1. Versioned Database Migrations & Reproducible Setup
-- Establish a baseline Prisma SQLite migration replacing unversioned schema pushes.
-- Configure clean environment initialization using migration deployment scripts (`prisma migrate deploy`).
-- Ensure local demonstration seeds run deterministically without invalidating migration history.
+### R1. 3 Dedicated Role-Based Login Sections
+Restructure both `/login` (global platform login) and `/mosque/[slug]/login` (mosque portal login) into 3 distinct, intuitive authentication sections/tabs:
+1. **Section 1: Worshipper & Member Sign-In**:
+   - For regular congregants accessing personal dashboards, active class/programme passes, donation history, and charitable tax receipts.
+   - Automatically directs worshippers to `/mosque/[slug]/dashboard`.
+2. **Section 2: Mosque Administrator & Imam Workspace**:
+   - For masjid committee members, imams, and treasurers managing Iqamah prayer schedules, publishing announcements, registering cash donations, and door check-ins.
+   - Automatically directs administrators to `/mosque/[slug]/admin`.
+3. **Section 3: Sovereign Platform Operator**:
+   - Dedicated access portal for platform super-administrators overseeing multi-tenant mosque onboarding, tenant status (Active/Suspended), and platform-wide metrics.
+   - Automatically directs operators to `/platform`.
 
-### R2. Security Hardening & Session Security
-- Implement secure, HTTP-only cookie-based authentication for browser sessions.
-- Enforce CSRF protection for all state-changing mutation endpoints (`POST`, `PATCH`, `DELETE`).
-- Centralize request validation schemas and enforce strict origin checks for production CORS.
-- Ensure sensitive administrative and financial actions generate structured `AuditEvent` records.
+### R2. Responsive UI & Royal Emerald/Gold Aesthetic
+- Maintain visual harmony with Royal Emerald Green (`#0d4734`), Warm Metallic Gold (`#c89b3c`), and clean ivory surfaces.
+- Provide smooth switching or distinct cards between the 3 sections with clear role badges, descriptions, and relevant placeholder hints.
+- Include quick links for new worshippers to create global accounts and for mosques to onboard new tenants.
 
-### R3. Administrative Workflows & Frontend Completion
-- Complete administrative programme lifecycle controls in the tenant workspace: programme creation, editing, capacity limits, and attendee attendance check-in.
-- Implement donation reconciliation controls, receipt verification status updates, and CSV ledger export functionality.
-- Surface in-app notification center and audit logs for authorized officers in the tenant portal.
+### R3. Authentication, Multi-Tenant Session & Security Preservation
+- Ensure cookies (`mh_session`, `mh_csrf`), Bearer tokens, and CSRF protection headers work flawlessly across all 3 portals.
+- Preserve 1-click multi-mosque switching and auto-membership linking upon sign-in.
 
-### R4. Comprehensive Automated Test Suite & Multi-Tenant Isolation
-- Implement end-to-end integration tests covering all 5 tenant-local roles: `tenant_admin`, `finance_officer`, `programme_officer`, `communications_officer`, and `member`.
-- Test global users possessing active memberships across multiple mosques.
-- Execute adversarial isolation test cases across multiple tenants verifying zero cross-tenant data leakage or unauthorized cross-tenant mutations.
+## Verification Resources
+- Backend automated test suite: `npm --prefix backend run test:node`
+- Frontend automated test suite: `npm --prefix frontend run test:node`
+- Production Next.js build verification: `npm --prefix frontend run build`
 
-## Acceptance Criteria to Satisfy
-- [ ] Fresh database initialization succeeds via `npm --prefix backend run db:migrate` and applies baseline migrations without errors.
-- [ ] Seed script executes idempotently via `npm --prefix backend run db:seed` and populates demo tenants, programmes, and donation records.
-- [ ] Authentication endpoints issue secure, HTTP-only session cookies.
-- [ ] State-changing endpoints reject requests lacking a valid CSRF token with HTTP 403.
-- [ ] Privileged financial actions (donation reconciliation, status changes) create corresponding `AuditEvent` records.
-- [ ] Authorized officers can create programmes, modify capacity, and mark attendee check-ins via API and UI.
-- [ ] Finance officers can reconcile donations and download structured CSV ledger exports.
-- [ ] In-app notifications are delivered to users and can be marked as read.
-- [ ] Automated test suite verifies permissions and restrictions across all 5 roles.
-- [ ] Multi-tenant isolation tests verify that tenant A cannot read or mutate donations, programmes, announcements, or members of tenant B.
-- [ ] Full test runner (`npm run test:logic` or equivalent test scripts) executes and passes with 100% success rate.
-- [ ] Frontend and backend build commands compile with zero TypeScript or syntax errors.
+## Acceptance Criteria
+
+### Role-Based Portals & Usability
+- [ ] Login interface presents 3 distinct, clearly labeled sections for Members, Mosque Admins, and Platform Operators.
+- [ ] Signing in under Section 1 routes members directly to `/mosque/[slug]/dashboard`.
+- [ ] Signing in under Section 2 routes administrators to `/mosque/[slug]/admin`.
+- [ ] Section 3 provides direct operator login / routing to `/platform`.
+- [ ] Destination mosque selection dropdown is integrated and reactive across mosque-specific and global routes.
+
+### Automated Quality & Build
+- [ ] All backend test suites pass with 0 errors.
+- [ ] All frontend test suites pass with 0 errors.
+- [ ] Next.js production build succeeds with 0 linting, type, or compilation errors.

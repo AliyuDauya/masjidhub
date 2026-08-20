@@ -104,12 +104,12 @@ interface UserMe {
 const ROLE_TABS: Record<TenantRole, Array<{ id: Tab; label: string }>> = {
   tenant_admin: [
     { id: 'overview', label: 'Overview' },
-    { id: 'announcements', label: 'Announcements' },
     { id: 'programs', label: 'Programmes & Roster' },
     { id: 'donations', label: 'Donations & Treasury' },
+    { id: 'announcements', label: 'Noticeboard' },
     { id: 'members', label: 'People & Roles' },
     { id: 'audit', label: 'Audit Logs' },
-    { id: 'settings', label: 'Mosque Settings' }
+    { id: 'settings', label: 'Settings' }
   ],
   finance_officer: [
     { id: 'overview', label: 'Overview' },
@@ -121,19 +121,19 @@ const ROLE_TABS: Record<TenantRole, Array<{ id: Tab; label: string }>> = {
   ],
   communications_officer: [
     { id: 'overview', label: 'Overview' },
-    { id: 'announcements', label: 'Announcements' }
+    { id: 'announcements', label: 'Noticeboard' }
   ],
-  member: []
+  member: [{ id: 'overview', label: 'Overview' }]
 };
 
-export default function AdminDashboard() {
+export default function MosqueAdmin() {
   const params = useParams();
   const router = useRouter();
   const slug = typeof params?.slug === 'string' ? params.slug : 'al-noor';
 
+  const [tab, setTab] = useState<Tab>('overview');
   const [currentRole, setCurrentRole] = useState<TenantRole>('tenant_admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
-  const [tab, setTab] = useState<Tab>('overview');
 
   const [mosque, setMosque] = useState<Mosque | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -142,18 +142,12 @@ export default function AdminDashboard() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-
-  // Announcement Form State
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('General');
-
-  // Member Invite State
   const [invite, setInvite] = useState({ name: '', email: '', role: 'member', temporary_password: '' });
 
-  // Program Form & Roster State
+  // Program Management State
   const [programForm, setProgramForm] = useState({
     title: '',
     description: '',
@@ -166,12 +160,14 @@ export default function AdminDashboard() {
     status: 'Published' as 'Draft' | 'Published' | 'Cancelled' | 'Completed'
   });
   const [editingProgramId, setEditingProgramId] = useState<number | null>(null);
+
+  // Program Roster State
   const [selectedRosterProgram, setSelectedRosterProgram] = useState<Program | null>(null);
   const [roster, setRoster] = useState<Attendee[]>([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [isDispatchingReminders, setIsDispatchingReminders] = useState(false);
 
-  // Donations State
+  // Donations Management State
   const [reconciliationFilter, setReconciliationFilter] = useState<'All' | 'Unreconciled' | 'Reconciled'>('All');
   const [showCashModal, setShowCashModal] = useState(false);
   const [cashForm, setCashForm] = useState({
@@ -185,9 +181,12 @@ export default function AdminDashboard() {
   const [isExporting, setIsExporting] = useState(false);
   const [reconcilingId, setReconcilingId] = useState<number | null>(null);
 
-  // Audit Logs Filter State
+  // Audit Logs State
   const [auditSearch, setAuditSearch] = useState('');
   const [auditCategoryFilter, setAuditCategoryFilter] = useState('All');
+
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   function done(text: string) {
     setMessage(text);
@@ -198,7 +197,6 @@ export default function AdminDashboard() {
   async function load() {
     setError('');
     try {
-      // 1. Resolve current user identity and membership role
       let userRole: TenantRole = 'tenant_admin';
       try {
         const me = await api<UserMe>(slug, '/api/auth/me');
@@ -210,7 +208,7 @@ export default function AdminDashboard() {
           }
         }
       } catch {
-        // Fallback default role if auth/me not yet initialized
+        // Fallback default
       }
 
       if (userRole === 'member') {
@@ -219,17 +217,14 @@ export default function AdminDashboard() {
       }
       setCurrentRole(userRole);
 
-      // Validate selected tab against allowed tabs
       const allowed = ROLE_TABS[userRole] || [];
       if (!allowed.some((t) => t.id === tab)) {
         setTab(allowed[0]?.id || 'overview');
       }
 
-      // 2. Fetch tenant profile
       const m = await api<Mosque>(null, `/api/mosques/${slug}`);
       setMosque(m);
 
-      // 3. Load role-appropriate collections
       if (userRole === 'tenant_admin' || userRole === 'communications_officer') {
         try {
           const a = await api<Announcement[]>(slug, '/api/announcements');
@@ -275,9 +270,6 @@ export default function AdminDashboard() {
     load();
   }, [slug]);
 
-  // ---------------------------------------------------------------------------
-  // Announcements Handlers
-  // ---------------------------------------------------------------------------
   async function publishAnnouncement(e: FormEvent) {
     e.preventDefault();
     try {
@@ -294,74 +286,74 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Member Management Handlers
-  // ---------------------------------------------------------------------------
   async function inviteMember(e: FormEvent) {
     e.preventDefault();
     try {
-      await api(slug, '/api/admin/memberships/invite', {
+      await api(slug, '/api/admin/memberships', {
         method: 'POST',
         body: JSON.stringify(invite)
       });
       setInvite({ name: '', email: '', role: 'member', temporary_password: '' });
-      done(`Member ${invite.name} added with role ${invite.role.replaceAll('_', ' ')}.`);
+      done('Person added and role assigned.');
       load();
     } catch (x) {
-      setError(x instanceof Error ? x.message : 'Could not add member.');
+      setError(x instanceof Error ? x.message : 'Could not add person.');
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Settings Handler
-  // ---------------------------------------------------------------------------
   async function saveSettings(e: FormEvent) {
     e.preventDefault();
     if (!mosque) return;
     try {
-      const updated = await api<Mosque>(slug, `/api/mosques/${slug}`, {
-        method: 'PUT',
-        body: JSON.stringify(mosque)
+      await api(slug, `/api/admin/mosques/${slug}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: mosque.name,
+          address: mosque.address,
+          email: mosque.email,
+          phone: mosque.phone,
+          timezone: mosque.timezone,
+          brand_color: mosque.brand_color
+        })
       });
-      setMosque(updated);
-      done('Mosque settings saved successfully.');
+      done('Mosque settings saved.');
+      load();
     } catch (x) {
       setError(x instanceof Error ? x.message : 'Could not save settings.');
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Program Management & Attendance Handlers
-  // ---------------------------------------------------------------------------
   async function saveProgram(e: FormEvent) {
     e.preventDefault();
-    try {
-      const payload = {
-        title: programForm.title,
-        description: programForm.description,
-        category: programForm.category,
-        start_date: new Date(programForm.start_date).toISOString(),
-        end_date: new Date(programForm.end_date).toISOString(),
-        location: programForm.location,
-        max_capacity: Number(programForm.max_capacity) || 0,
-        visibility: programForm.visibility,
-        status: programForm.status
-      };
+    if (!programForm.title || !programForm.start_date || !programForm.end_date || !programForm.location) {
+      setError('Please fill in all required programme fields.');
+      return;
+    }
 
+    try {
       if (editingProgramId) {
         await api(slug, `/api/admin/programs/${editingProgramId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload)
+          method: 'PATCH',
+          body: JSON.stringify({
+            ...programForm,
+            start_date: new Date(programForm.start_date).toISOString(),
+            end_date: new Date(programForm.end_date).toISOString()
+          })
         });
         done('Programme updated successfully.');
       } else {
         await api(slug, '/api/admin/programs', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            ...programForm,
+            start_date: new Date(programForm.start_date).toISOString(),
+            end_date: new Date(programForm.end_date).toISOString()
+          })
         });
         done('Programme scheduled successfully.');
       }
 
+      setEditingProgramId(null);
       setProgramForm({
         title: '',
         description: '',
@@ -373,29 +365,31 @@ export default function AdminDashboard() {
         visibility: 'Public',
         status: 'Published'
       });
-      setEditingProgramId(null);
       load();
     } catch (x) {
       setError(x instanceof Error ? x.message : 'Could not save programme.');
     }
   }
 
-  function editProgram(prog: Program) {
-    setEditingProgramId(prog.program_id);
-    const startStr = prog.start_date ? new Date(prog.start_date).toISOString().slice(0, 16) : '';
-    const endStr = prog.end_date ? new Date(prog.end_date).toISOString().slice(0, 16) : '';
+  function editProgram(program: Program) {
+    setEditingProgramId(program.program_id);
+    const formatLocal = (iso: string) => {
+      const d = new Date(iso);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     setProgramForm({
-      title: prog.title,
-      description: prog.description,
-      category: prog.category || 'Education',
-      start_date: startStr,
-      end_date: endStr,
-      location: prog.location,
-      max_capacity: prog.max_capacity,
-      visibility: prog.visibility,
-      status: prog.status
+      title: program.title,
+      description: program.description,
+      category: program.category || 'Education',
+      start_date: formatLocal(program.start_date),
+      end_date: formatLocal(program.end_date),
+      location: program.location,
+      max_capacity: program.max_capacity || 0,
+      visibility: program.visibility || 'Public',
+      status: program.status || 'Published'
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function deleteProgram(id: number) {
@@ -452,9 +446,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Donations Handlers
-  // ---------------------------------------------------------------------------
   async function reconcileDonation(id: number) {
     setReconcilingId(id);
     try {
@@ -525,13 +516,11 @@ export default function AdminDashboard() {
     }
   }
 
-  // Filtered Donations
   const filteredDonations = donations.filter((d) => {
     if (reconciliationFilter === 'All') return true;
     return d.reconciliation_status === reconciliationFilter;
   });
 
-  // Filtered Audit Events
   const filteredAuditEvents = auditEvents.filter((ev) => {
     const matchesSearch =
       auditSearch === '' ||
@@ -557,65 +546,62 @@ export default function AdminDashboard() {
   const navItems = ROLE_TABS[currentRole] || ROLE_TABS.tenant_admin;
 
   return (
-    <main
-      className="min-h-screen bg-slate-50 text-slate-900"
-      style={{ '--tenant-color': mosque?.brand_color || '#087f5b' } as React.CSSProperties}
-    >
-      {/* Header Band */}
-      <header className="tenant-band px-6 py-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b bg-white shadow-xs">
-        <div>
-          <div className="flex items-center space-x-2 mb-1">
-            <span className="eyebrow uppercase text-xs font-semibold text-emerald-800">
-              Workspace / {slug}
-            </span>
-            <span className="text-slate-300">·</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold uppercase">
-              {currentRole.replaceAll('_', ' ')}
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            {mosque?.name || 'Mosque Administration'}
-          </h1>
+    <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
+      {/* 80px Glassmorphism Navigation Header */}
+      <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <Link href={`/mosque/${slug}`} className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
+            <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
+            <span>MASJIDHUB</span>
+          </Link>
+          <span className="text-[#c89b3c]/40">/</span>
+          <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+            WORKSPACE ({slug})
+          </span>
+          <span className="text-[9px] font-black uppercase tracking-widest bg-[#e4efe9] text-[#0d4734] px-2.5 py-0.5 rounded-full border border-[#0d4734]/20 hidden sm:inline">
+            {currentRole.replaceAll('_', ' ')}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Notification Center */}
           <NotificationCenter slug={slug} />
-
-          <Link href={`/mosque/${slug}/admin/analytics`} className="btn-secondary text-sm">
-            Reports & Analytics
+          <Link
+            href={`/mosque/${slug}/admin/analytics`}
+            className="btn-pill-secondary py-2 px-4 text-[9px] tracking-ultra-wide hidden sm:inline-flex"
+          >
+            ANALYTICS
           </Link>
           <button
-            className="btn-secondary text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
             onClick={() => {
               clearToken(slug);
               router.push(`/mosque/${slug}`);
             }}
+            className="text-[9px] font-black uppercase tracking-widest text-red-600 hover:text-red-800 px-3 py-2"
           >
-            Sign out
+            SIGN OUT
           </button>
         </div>
       </header>
 
       {/* Main Layout Grid */}
-      <div className="max-w-7xl mx-auto px-6 py-10 grid md:grid-cols-[240px_1fr] gap-8">
+      <div className="max-w-7xl mx-auto px-6 md:px-12 py-12 grid md:grid-cols-[240px_1fr] gap-8 flex-grow w-full">
         {/* Navigation Sidebar */}
-        <nav className="space-y-1.5">
+        <nav className="space-y-2">
           {navItems.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center justify-between ${
+              className={`w-full text-left px-4 py-3 rounded-[8px] text-xs font-black uppercase tracking-wider transition-all flex items-center justify-between ${
                 tab === id
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+                  ? 'bg-[#0d4734] text-[#c89b3c] border-2 border-[#c89b3c] shadow-md'
+                  : 'bg-white text-[#1c2421] hover:bg-[#f6f3eb] border border-[#c89b3c]/20'
               }`}
             >
               <span>{label}</span>
               {id === 'donations' && donations.filter((d) => d.reconciliation_status === 'Unreconciled').length > 0 && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                    tab === id ? 'bg-white text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  className={`text-[9px] px-2 py-0.5 rounded-full font-black ${
+                    tab === id ? 'bg-[#c89b3c] text-[#0d4734]' : 'bg-amber-100 text-amber-900'
                   }`}
                 >
                   {donations.filter((d) => d.reconciliation_status === 'Unreconciled').length}
@@ -628,76 +614,88 @@ export default function AdminDashboard() {
         {/* Workspace Content View */}
         <section className="min-w-0 space-y-6">
           {error && (
-            <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+            <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold uppercase rounded-[6px]">
               {error}
             </div>
           )}
           {message && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium">
+            <div className="p-4 bg-[#e4efe9] border border-[#0d4734] text-[#0d4734] text-xs font-bold uppercase rounded-[6px]">
               {message}
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: OVERVIEW */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'overview' && (
             <div className="space-y-6">
-              <div className="card-premium bg-linear-to-r from-emerald-800 to-teal-900 text-white p-8 rounded-2xl">
-                <p className="eyebrow text-emerald-200">Sovereign Mosque Operations</p>
-                <h2 className="text-3xl font-bold mt-1">Welcome back{currentUser?.name ? `, ${currentUser.name}` : ''}</h2>
-                <p className="text-emerald-100 text-sm mt-2 max-w-2xl">
-                  You are logged into {mosque?.name || 'the mosque'} as{' '}
-                  <strong className="text-white underline">{currentRole.replaceAll('_', ' ')}</strong>. Manage
-                  timetables, attendees, donations, and notifications directly from your workspace.
+              <div className="bg-[#0d4734] text-white p-8 md:p-10 rounded-[16px] border-2 border-[#c89b3c] shadow-xl relative overflow-hidden">
+                <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-2">
+                  SOVEREIGN MOSQUE OPERATIONS
+                </span>
+                <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter">
+                  Welcome back{currentUser?.name ? `, ${currentUser.name}` : ''}
+                </h2>
+                <p className="text-[#e4efe9] text-xs sm:text-sm mt-2 max-w-2xl font-normal leading-relaxed">
+                  You are authenticated to {mosque?.name || 'the mosque'} as{' '}
+                  <strong className="text-[#c89b3c] uppercase underline">{currentRole.replaceAll('_', ' ')}</strong>. Manage
+                  timetables, attendees, donations, and dispatches directly from your workspace.
                 </p>
               </div>
 
               {/* Stats Overview */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="card-premium p-6">
-                  <p className="text-xs uppercase font-bold text-slate-500">Programmes</p>
-                  <p className="text-3xl font-bold mt-2">{programs.length}</p>
-                  <p className="text-xs text-slate-500 mt-1">Active scheduled learning</p>
+                <div className="bg-white p-6 rounded-[12px] border-2 border-[#c89b3c]/20 shadow-xs">
+                  <span className="text-[9px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                    PROGRAMMES
+                  </span>
+                  <p className="text-3xl font-black text-[#0d4734]">{programs.length}</p>
+                  <p className="text-[10px] font-mono text-[#1c2421]/50 mt-1 uppercase">Active learning circles</p>
                 </div>
-                <div className="card-premium p-6">
-                  <p className="text-xs uppercase font-bold text-slate-500">Donations</p>
-                  <p className="text-3xl font-bold mt-2">{donations.length}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                <div className="bg-white p-6 rounded-[12px] border-2 border-[#c89b3c]/20 shadow-xs">
+                  <span className="text-[9px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                    DONATIONS
+                  </span>
+                  <p className="text-3xl font-black text-[#0d4734]">{donations.length}</p>
+                  <p className="text-[10px] font-mono text-[#1c2421]/50 mt-1 uppercase">
                     {donations.filter((d) => d.reconciliation_status === 'Reconciled').length} reconciled
                   </p>
                 </div>
-                <div className="card-premium p-6">
-                  <p className="text-xs uppercase font-bold text-slate-500">Notices</p>
-                  <p className="text-3xl font-bold mt-2">{announcements.length}</p>
-                  <p className="text-xs text-slate-500 mt-1">Published community notices</p>
+                <div className="bg-white p-6 rounded-[12px] border-2 border-[#c89b3c]/20 shadow-xs">
+                  <span className="text-[9px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                    NOTICES
+                  </span>
+                  <p className="text-3xl font-black text-[#0d4734]">{announcements.length}</p>
+                  <p className="text-[10px] font-mono text-[#1c2421]/50 mt-1 uppercase">Published bulletins</p>
                 </div>
-                <div className="card-premium p-6">
-                  <p className="text-xs uppercase font-bold text-slate-500">Members</p>
-                  <p className="text-3xl font-bold mt-2">{members.length}</p>
-                  <p className="text-xs text-slate-500 mt-1">Registered worshippers & staff</p>
+                <div className="bg-white p-6 rounded-[12px] border-2 border-[#c89b3c]/20 shadow-xs">
+                  <span className="text-[9px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                    MEMBERS
+                  </span>
+                  <p className="text-3xl font-black text-[#0d4734]">{members.length}</p>
+                  <p className="text-[10px] font-mono text-[#1c2421]/50 mt-1 uppercase">Congregation worshippers</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: ANNOUNCEMENTS */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'announcements' && (
             <div className="space-y-6">
-              <form onSubmit={publishAnnouncement} className="card-premium space-y-4">
-                <p className="eyebrow">Public communication</p>
-                <h2 className="text-2xl font-bold">Publish an announcement</h2>
+              <form onSubmit={publishAnnouncement} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+                <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                  COMMUNICATION DISPATCH
+                </span>
+                <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                  Publish Notice
+                </h2>
                 <input
-                  className="input-field"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Announcement title"
+                  placeholder="ANNOUNCEMENT TITLE"
                   required
                 />
                 <select
-                  className="input-field"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
@@ -707,35 +705,37 @@ export default function AdminDashboard() {
                   <option value="Urgent">Urgent Alert</option>
                 </select>
                 <textarea
-                  className="input-field min-h-28"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-normal text-[#1c2421] focus:outline-none focus:border-[#0d4734] min-h-[120px]"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="What should the community know?"
                   required
                 />
-                <button type="submit" className="btn-primary">
-                  Publish announcement
+                <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
+                  PUBLISH ANNOUNCEMENT →
                 </button>
               </form>
 
-              <div className="card-premium">
-                <h2 className="text-xl font-bold mb-4">Published noticeboard</h2>
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
+                <h2 className="text-xl font-black uppercase tracking-tight text-[#0d4734] mb-4">
+                  Published Noticeboard
+                </h2>
                 {announcements.length === 0 ? (
-                  <p className="text-slate-400 text-sm py-4">No published announcements yet.</p>
+                  <p className="text-xs font-mono text-[#1c2421]/50 uppercase py-4">No published announcements yet.</p>
                 ) : (
-                  <div className="space-y-4 divide-y divide-slate-100">
+                  <div className="space-y-4 divide-y divide-[#c89b3c]/15">
                     {announcements.map((a) => (
                       <article key={a.announcement_id} className="pt-4 first:pt-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="eyebrow text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-[#0d4734] bg-[#e4efe9] px-2 py-0.5 rounded">
                             {a.category}
                           </span>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-[9px] font-mono text-[#1c2421]/50">
                             {new Date(a.posted_at).toLocaleDateString()}
                           </span>
                         </div>
-                        <h3 className="text-lg font-bold mt-1">{a.title}</h3>
-                        <p className="text-slate-600 text-sm mt-1 leading-relaxed">{a.content}</p>
+                        <h3 className="text-lg font-black uppercase tracking-tight text-[#0d4734]">{a.title}</h3>
+                        <p className="text-xs text-[#1c2421]/70 leading-relaxed font-normal mt-1">{a.content}</p>
                       </article>
                     ))}
                   </div>
@@ -744,18 +744,18 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: PROGRAMMES & ROSTER */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'programs' && (
             <div className="space-y-6">
               {/* Program Schedule / Edit Form */}
-              <form onSubmit={saveProgram} className="card-premium space-y-4">
+              <form onSubmit={saveProgram} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="eyebrow">Learning & Community</p>
-                    <h2 className="text-2xl font-bold">
-                      {editingProgramId ? 'Edit Programme' : 'Schedule a New Programme'}
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                      LEARNING & CIRCLES
+                    </span>
+                    <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                      {editingProgramId ? 'Edit Programme' : 'Schedule New Programme'}
                     </h2>
                   </div>
                   {editingProgramId && (
@@ -775,21 +775,21 @@ export default function AdminDashboard() {
                           status: 'Published'
                         });
                       }}
-                      className="btn-secondary text-xs"
+                      className="btn-pill-secondary py-1 px-3 text-[9px]"
                     >
-                      Cancel Edit
+                      CANCEL EDIT
                     </button>
                   )}
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       Programme Title *
                     </label>
                     <input
-                      className="input-field"
-                      placeholder="e.g. Weekend Tajweed Intensive"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      placeholder="E.G. WEEKEND TAJWEED INTENSIVE"
                       value={programForm.title}
                       onChange={(e) => setProgramForm({ ...programForm, title: e.target.value })}
                       required
@@ -797,11 +797,11 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       Category *
                     </label>
                     <select
-                      className="input-field"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       value={programForm.category}
                       onChange={(e) => setProgramForm({ ...programForm, category: e.target.value })}
                     >
@@ -815,12 +815,12 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       Location / Hall *
                     </label>
                     <input
-                      className="input-field"
-                      placeholder="e.g. Main Prayer Hall / Classroom 2"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      placeholder="E.G. MAIN PRAYER HALL"
                       value={programForm.location}
                       onChange={(e) => setProgramForm({ ...programForm, location: e.target.value })}
                       required
@@ -828,11 +828,11 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       Start Date & Time *
                     </label>
                     <input
-                      className="input-field"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       type="datetime-local"
                       value={programForm.start_date}
                       onChange={(e) => setProgramForm({ ...programForm, start_date: e.target.value })}
@@ -841,11 +841,11 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       End Date & Time *
                     </label>
                     <input
-                      className="input-field"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       type="datetime-local"
                       value={programForm.end_date}
                       onChange={(e) => setProgramForm({ ...programForm, end_date: e.target.value })}
@@ -854,11 +854,11 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
-                      Seat Capacity limit (0 for unlimited)
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                      Seat Capacity Limit (0 for open)
                     </label>
                     <input
-                      className="input-field"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       type="number"
                       min={0}
                       value={programForm.max_capacity}
@@ -869,11 +869,11 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                       Visibility & Access
                     </label>
                     <select
-                      className="input-field"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       value={programForm.visibility}
                       onChange={(e) =>
                         setProgramForm({ ...programForm, visibility: e.target.value as 'Public' | 'Members' })
@@ -886,50 +886,52 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                  <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                     Programme Description *
                   </label>
                   <textarea
-                    className="input-field min-h-24"
-                    placeholder="Provide overview, instructor, curriculum, requirements..."
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-normal text-[#1c2421] focus:outline-none focus:border-[#0d4734] min-h-[100px]"
+                    placeholder="Provide overview, curriculum, teacher details..."
                     value={programForm.description}
                     onChange={(e) => setProgramForm({ ...programForm, description: e.target.value })}
                     required
                   />
                 </div>
 
-                <button type="submit" className="btn-primary">
-                  {editingProgramId ? 'Update Programme' : 'Schedule Programme'}
+                <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
+                  {editingProgramId ? 'UPDATE PROGRAMME →' : 'SCHEDULE PROGRAMME →'}
                 </button>
               </form>
 
               {/* Programmes List */}
-              <div className="card-premium">
-                <h2 className="text-xl font-bold mb-4">Active & Scheduled Programmes</h2>
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
+                <h2 className="text-xl font-black uppercase tracking-tight text-[#0d4734] mb-4">
+                  Active & Scheduled Programmes
+                </h2>
                 {programs.length === 0 ? (
-                  <p className="text-slate-400 text-sm py-4">No programmes scheduled.</p>
+                  <p className="text-xs font-mono text-[#1c2421]/50 uppercase py-4">No programmes scheduled.</p>
                 ) : (
                   <div className="space-y-4">
                     {programs.map((p) => (
                       <div
                         key={p.program_id}
-                        className="p-4 border rounded-xl hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+                        className="p-5 border border-[#c89b3c]/20 rounded-[12px] hover:border-[#0d4734] transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#fcfbfa]"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
-                            <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-[#0d4734] bg-[#e4efe9] px-2 py-0.5 rounded">
                               {p.category}
                             </span>
-                            <span className="text-xs bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded">
+                            <span className="text-[9px] font-mono text-[#1c2421]/50">
                               {p.visibility}
                             </span>
-                            <span className="text-xs text-slate-500">
-                              {p.max_capacity > 0 ? `Cap: ${p.max_capacity} seats` : 'Open / Unlimited capacity'}
+                            <span className="text-[9px] font-mono text-[#c89b3c]">
+                              {p.max_capacity > 0 ? `CAP: ${p.max_capacity}` : 'OPEN CAPACITY'}
                             </span>
                           </div>
-                          <h3 className="text-lg font-bold text-slate-900">{p.title}</h3>
-                          <p className="text-xs text-slate-600">
-                            📍 {p.location} · 🗓️ {new Date(p.start_date).toLocaleDateString()} at{' '}
+                          <h3 className="text-lg font-black uppercase tracking-tight text-[#0d4734]">{p.title}</h3>
+                          <p className="text-xs text-[#1c2421]/70">
+                            📍 {p.location} • 🗓️ {new Date(p.start_date).toLocaleDateString()} at{' '}
                             {new Date(p.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -937,21 +939,21 @@ export default function AdminDashboard() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => openRoster(p)}
-                            className="btn-primary text-xs px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800"
+                            className="btn-pill-cta py-2 px-4 text-[9px] tracking-widest"
                           >
-                            View Roster & Check-In
+                            ROSTER & CHECK-IN
                           </button>
                           <button
                             onClick={() => editProgram(p)}
-                            className="btn-secondary text-xs px-3 py-1.5"
+                            className="btn-pill-secondary py-2 px-3 text-[9px] tracking-widest"
                           >
-                            Edit
+                            EDIT
                           </button>
                           <button
                             onClick={() => deleteProgram(p.program_id)}
-                            className="btn-secondary text-xs px-3 py-1.5 text-red-600 hover:bg-red-50"
+                            className="btn-pill-secondary py-2 px-3 text-[9px] tracking-widest text-red-600 hover:text-red-700"
                           >
-                            Delete
+                            DELETE
                           </button>
                         </div>
                       </div>
@@ -962,67 +964,70 @@ export default function AdminDashboard() {
 
               {/* Attendee Roster Modal */}
               {selectedRosterProgram && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl space-y-5">
-                    <div className="flex justify-between items-start border-b pb-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-white rounded-[16px] border-2 border-[#c89b3c]/40 p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl space-y-6">
+                    <div className="flex justify-between items-start border-b border-[#c89b3c]/20 pb-4">
                       <div>
-                        <span className="eyebrow text-emerald-800">Programme Roster & Check-In</span>
-                        <h3 className="text-2xl font-bold">{selectedRosterProgram.title}</h3>
-                        <p className="text-xs text-slate-500 mt-1">
-                          📍 {selectedRosterProgram.location} · {roster.length} registered attendee(s)
+                        <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+                          ROSTER & DOOR CHECK-IN
+                        </span>
+                        <h3 className="text-2xl font-black uppercase tracking-tight text-[#0d4734] mt-1">
+                          {selectedRosterProgram.title}
+                        </h3>
+                        <p className="text-xs font-mono text-[#1c2421]/60 mt-1">
+                          📍 {selectedRosterProgram.location} • {roster.length} registered attendee(s)
                         </p>
                       </div>
                       <button
                         onClick={() => setSelectedRosterProgram(null)}
-                        className="text-slate-400 hover:text-slate-600 text-lg"
+                        className="text-xs font-black uppercase tracking-widest text-[#1c2421]/50 hover:text-[#1c2421]"
                       >
-                        ✕
+                        [CLOSE ×]
                       </button>
                     </div>
 
-                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
-                      <div className="text-xs text-slate-600">
-                        <strong>Check-In Progress:</strong> {roster.filter((r) => r.status === 'Attended').length} /{' '}
-                        {roster.length} checked in
+                    <div className="flex justify-between items-center bg-[#f6f3eb] p-4 rounded-[8px] border border-[#c89b3c]/20">
+                      <div className="text-xs font-bold text-[#0d4734]">
+                        Check-In: {roster.filter((r) => r.status === 'Attended').length} / {roster.length} checked in
                       </div>
                       <button
                         onClick={() => dispatchReminders(selectedRosterProgram.program_id)}
                         disabled={isDispatchingReminders}
-                        className="btn-secondary text-xs"
+                        className="btn-pill-gold py-1.5 px-4 text-[9px] tracking-widest"
                       >
-                        {isDispatchingReminders ? 'Broadcasting...' : '📢 Broadcast Reminders'}
+                        {isDispatchingReminders ? 'BROADCASTING…' : '📢 BROADCAST REMINDERS'}
                       </button>
                     </div>
 
                     {loadingRoster ? (
-                      <p className="text-center text-xs text-slate-400 py-8">Loading attendee roster...</p>
+                      <p className="text-center text-xs font-mono uppercase text-[#1c2421]/50 py-8">Loading roster…</p>
                     ) : roster.length === 0 ? (
-                      <p className="text-center text-xs text-slate-400 py-8">No members registered yet.</p>
+                      <p className="text-center text-xs font-mono uppercase text-[#1c2421]/50 py-8">No attendees registered yet.</p>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
                           <thead>
-                            <tr className="border-b text-slate-500 font-semibold">
+                            <tr className="border-b border-[#c89b3c]/20 text-[#1c2421]/50 uppercase text-[9px] font-black tracking-widest">
                               <th className="py-2.5 px-2">Attendee</th>
-                              <th className="py-2.5 px-2">Contact</th>
-                              <th className="py-2.5 px-2">Reg Date</th>
+                              <th className="py-2.5 px-2">Email</th>
+                              <th className="py-2.5 px-2">Registered</th>
                               <th className="py-2.5 px-2">Status</th>
                               <th className="py-2.5 px-2 text-right">Door Check-In</th>
                             </tr>
                           </thead>
                           <tbody>
                             {roster.map((r) => (
-                              <tr key={r.reg_id} className="border-b hover:bg-slate-50/50">
-                                <td className="py-2.5 px-2 font-bold">{r.user?.name || 'Member'}</td>
-                                <td className="py-2.5 px-2 text-slate-500">{r.user?.email}</td>
-                                <td className="py-2.5 px-2 text-slate-500">
+                              <tr key={r.reg_id} className="border-b border-[#c89b3c]/10 hover:bg-[#f6f3eb]/50">
+                                <td className="py-2.5 px-2 font-bold text-[#0d4734]">{r.user?.name || 'Member'}</td>
+                                <td className="py-2.5 px-2 text-[#1c2421]/60 font-mono text-[10px]">{r.user?.email}</td>
+                                <td className="py-2.5 px-2 text-[#1c2421]/60 font-mono text-[10px]">
                                   {new Date(r.reg_date).toLocaleDateString()}
                                 </td>
                                 <td className="py-2.5 px-2">
                                   <span
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                       r.status === 'Attended'
-                                        ? 'bg-emerald-100 text-emerald-800'
+                                        ? 'bg-[#e4efe9] text-[#0d4734]'
                                         : r.status === 'Registered'
                                         ? 'bg-blue-100 text-blue-800'
                                         : 'bg-red-100 text-red-800'
@@ -1034,13 +1039,13 @@ export default function AdminDashboard() {
                                 <td className="py-2.5 px-2 text-right">
                                   <button
                                     onClick={() => toggleAttendance(r.reg_id, r.status)}
-                                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                                    className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest transition-all ${
                                       r.status === 'Attended'
                                         ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                                        : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                                        : 'bg-[#0d4734] text-white hover:bg-[#c89b3c]'
                                     }`}
                                   >
-                                    {r.status === 'Attended' ? 'Undo Check-In' : '✓ Check In'}
+                                    {r.status === 'Attended' ? 'UNDO' : '✓ CHECK IN'}
                                   </button>
                                 </td>
                               </tr>
@@ -1055,41 +1060,46 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: DONATIONS & TREASURY */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'donations' && (
             <div className="space-y-6">
-              <div className="card-premium">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-[#c89b3c]/20 pb-4">
                   <div>
-                    <p className="eyebrow">Financial records & treasury</p>
-                    <h2 className="text-2xl font-bold">Donation Ledger</h2>
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                      TREASURY RECONCILIATION
+                    </span>
+                    <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                      Donation Ledger
+                    </h2>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => setShowCashModal(true)} className="btn-primary text-sm">
-                      + Record Cash Donation
+                    <button
+                      onClick={() => setShowCashModal(true)}
+                      className="btn-pill-cta py-2 px-4 text-[9px] tracking-widest"
+                    >
+                      + RECORD CASH ENTRY
                     </button>
                     <button
                       onClick={exportDonations}
                       disabled={isExporting}
-                      className="btn-secondary text-sm"
+                      className="btn-pill-secondary py-2 px-4 text-[9px] tracking-widest"
                     >
-                      {isExporting ? 'Exporting...' : 'Export CSV'}
+                      {isExporting ? 'EXPORTING…' : 'EXPORT CSV'}
                     </button>
                   </div>
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex gap-2 border-b pb-4 mb-4 text-sm">
+                <div className="flex gap-2 border-b border-[#c89b3c]/15 pb-4 mb-4 text-xs font-bold">
                   {(['All', 'Unreconciled', 'Reconciled'] as const).map((f) => (
                     <button
                       key={f}
                       onClick={() => setReconciliationFilter(f)}
-                      className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                      className={`px-3 py-1.5 rounded-[6px] transition-colors uppercase tracking-wider ${
                         reconciliationFilter === f
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          ? 'bg-[#0d4734] text-white font-black'
+                          : 'bg-[#f6f3eb] text-[#1c2421] hover:bg-[#e4efe9]'
                       }`}
                     >
                       {f} (
@@ -1103,9 +1113,9 @@ export default function AdminDashboard() {
 
                 {/* Ledger Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
+                  <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b text-slate-500 font-semibold text-xs uppercase">
+                      <tr className="border-b border-[#c89b3c]/20 text-[#1c2421]/50 uppercase text-[9px] font-black tracking-widest">
                         <th className="py-3 px-2">Receipt</th>
                         <th className="py-3 px-2">Date</th>
                         <th className="py-3 px-2">Category</th>
@@ -1117,25 +1127,25 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {filteredDonations.map((d) => (
-                        <tr key={d.donation_id} className="border-b hover:bg-slate-50/50">
-                          <td className="py-3 px-2 font-mono font-bold text-xs">{d.receipt_number}</td>
-                          <td className="py-3 px-2 text-slate-500 text-xs">
+                        <tr key={d.donation_id} className="border-b border-[#c89b3c]/10 hover:bg-[#f6f3eb]/40">
+                          <td className="py-3 px-2 font-mono font-bold text-xs text-[#0d4734]">{d.receipt_number}</td>
+                          <td className="py-3 px-2 text-[#1c2421]/60 font-mono text-[10px]">
                             {new Date(d.date).toLocaleDateString()}
                           </td>
                           <td className="py-3 px-2">
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-xs font-semibold">
+                            <span className="px-2 py-0.5 rounded bg-[#f6f3eb] text-[10px] font-black uppercase text-[#0d4734]">
                               {d.category}
                             </span>
                           </td>
-                          <td className="py-3 px-2 text-xs">{d.method}</td>
-                          <td className="py-3 px-2 font-semibold">
+                          <td className="py-3 px-2 font-mono text-[10px] uppercase">{d.method}</td>
+                          <td className="py-3 px-2 font-black text-[#0d4734]">
                             {d.currency} {d.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-2">
                             <span
-                              className={`px-2 py-0.5 rounded text-xs font-bold ${
+                              className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                 d.reconciliation_status === 'Reconciled'
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-[#e4efe9] text-[#0d4734]'
                                   : 'bg-amber-100 text-amber-800'
                               }`}
                             >
@@ -1147,19 +1157,19 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => reconcileDonation(d.donation_id)}
                                 disabled={reconcilingId === d.donation_id}
-                                className="btn-secondary text-xs px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
+                                className="btn-pill-cta py-1 px-3 text-[8px] tracking-widest"
                               >
-                                {reconcilingId === d.donation_id ? 'Reconciling...' : 'Reconcile'}
+                                {reconcilingId === d.donation_id ? 'RECONCILING…' : 'RECONCILE'}
                               </button>
                             ) : (
-                              <span className="text-xs text-emerald-700 font-bold">✓ Verified</span>
+                              <span className="text-[10px] text-[#0d4734] font-black uppercase">✓ VERIFIED</span>
                             )}
                           </td>
                         </tr>
                       ))}
                       {filteredDonations.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400 text-sm">
+                          <td colSpan={7} className="py-8 text-center text-xs font-mono uppercase text-[#1c2421]/50">
                             No donations matching filter.
                           </td>
                         </tr>
@@ -1171,24 +1181,31 @@ export default function AdminDashboard() {
 
               {/* Offline Cash Entry Modal */}
               {showCashModal && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-                    <div className="flex justify-between items-center border-b pb-3">
-                      <h3 className="text-xl font-bold">Record Cash Donation</h3>
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+                  <div className="bg-white rounded-[16px] border-2 border-[#c89b3c]/40 p-8 max-w-md w-full shadow-2xl space-y-4">
+                    <div className="flex justify-between items-center border-b border-[#c89b3c]/20 pb-3">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                          MANUAL CASH DESK
+                        </span>
+                        <h3 className="text-xl font-black uppercase tracking-tight text-[#0d4734]">
+                          Record Cash Donation
+                        </h3>
+                      </div>
                       <button
                         onClick={() => setShowCashModal(false)}
-                        className="text-slate-400 hover:text-slate-600 text-lg"
+                        className="text-xs font-black uppercase tracking-widest text-[#1c2421]/50 hover:text-[#1c2421]"
                       >
-                        ✕
+                        [CLOSE ×]
                       </button>
                     </div>
                     <form onSubmit={handleRecordCash} className="space-y-4">
                       <div>
-                        <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                        <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                           Amount ({cashForm.currency}) *
                         </label>
                         <input
-                          className="input-field"
+                          className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                           type="number"
                           step="0.01"
                           min="0.01"
@@ -1199,11 +1216,11 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                        <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
                           Category *
                         </label>
                         <select
-                          className="input-field"
+                          className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                           value={cashForm.category}
                           onChange={(e) =>
                             setCashForm({
@@ -1219,24 +1236,24 @@ export default function AdminDashboard() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
-                          Donor Email (optional)
+                        <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                          Donor Email (Optional)
                         </label>
                         <input
-                          className="input-field"
+                          className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                           type="email"
-                          placeholder="donor@example.com"
+                          placeholder="DONOR@EXAMPLE.COM"
                           value={cashForm.donor_email}
                           onChange={(e) => setCashForm({ ...cashForm, donor_email: e.target.value })}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
-                          Reference / Envelope Notes (optional)
+                        <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                          Envelope Notes / Identifier (Optional)
                         </label>
                         <input
-                          className="input-field"
-                          placeholder="e.g. Friday Jumuah Envelope #42"
+                          className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                          placeholder="E.G. FRIDAY JUMUAH ENVELOPE #42"
                           value={cashForm.notes}
                           onChange={(e) => setCashForm({ ...cashForm, notes: e.target.value })}
                         />
@@ -1245,12 +1262,16 @@ export default function AdminDashboard() {
                         <button
                           type="button"
                           onClick={() => setShowCashModal(false)}
-                          className="btn-secondary text-sm"
+                          className="btn-pill-secondary py-2 px-4 text-[9px]"
                         >
-                          Cancel
+                          CANCEL
                         </button>
-                        <button type="submit" disabled={isSavingCash} className="btn-primary text-sm">
-                          {isSavingCash ? 'Recording...' : 'Save Cash Donation'}
+                        <button
+                          type="submit"
+                          disabled={isSavingCash}
+                          className="btn-pill-cta py-2 px-5 text-[9px] tracking-widest"
+                        >
+                          {isSavingCash ? 'RECORDING…' : 'SAVE CASH DONATION'}
                         </button>
                       </div>
                     </form>
@@ -1260,32 +1281,34 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: PEOPLE & ROLES */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'members' && (
             <div className="space-y-6">
-              <form onSubmit={inviteMember} className="card-premium space-y-4">
-                <p className="eyebrow">Access control</p>
-                <h2 className="text-2xl font-bold">Add / Invite a person</h2>
+              <form onSubmit={inviteMember} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+                <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                  ACCESS & ROLES
+                </span>
+                <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                  Assign Member Role
+                </h2>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <input
-                    className="input-field"
-                    placeholder="Full name"
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                    placeholder="FULL NAME"
                     value={invite.name}
                     onChange={(e) => setInvite({ ...invite, name: e.target.value })}
                     required
                   />
                   <input
-                    className="input-field"
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                     type="email"
-                    placeholder="Email"
+                    placeholder="EMAIL"
                     value={invite.email}
                     onChange={(e) => setInvite({ ...invite, email: e.target.value })}
                     required
                   />
                   <select
-                    className="input-field"
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                     value={invite.role}
                     onChange={(e) => setInvite({ ...invite, role: e.target.value })}
                   >
@@ -1296,29 +1319,31 @@ export default function AdminDashboard() {
                     <option value="tenant_admin">Tenant Administrator</option>
                   </select>
                   <input
-                    className="input-field"
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                     type="password"
                     minLength={8}
-                    placeholder="Temporary password"
+                    placeholder="TEMPORARY PASSWORD (MIN 8 CHARS)"
                     value={invite.temporary_password}
                     onChange={(e) => setInvite({ ...invite, temporary_password: e.target.value })}
                     required
                   />
                 </div>
-                <button type="submit" className="btn-primary">
-                  Add person
+                <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
+                  ASSIGN PERMISSIONS →
                 </button>
               </form>
 
-              <div className="card-premium">
-                <h2 className="text-xl font-bold mb-4">People with Mosque Access</h2>
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
+                <h2 className="text-xl font-black uppercase tracking-tight text-[#0d4734] mb-4">
+                  Active Mosque Roster
+                </h2>
                 {members.map((m) => (
-                  <div key={m.membership_id} className="flex justify-between items-center py-3 border-b text-sm">
-                    <span>
-                      <strong>{m.user?.name || 'Member'}</strong>
-                      <small className="block text-slate-500">{m.user?.email}</small>
-                    </span>
-                    <span className="text-xs px-2.5 py-1 rounded bg-slate-100 font-semibold">
+                  <div key={m.membership_id} className="flex justify-between items-center py-3.5 border-b border-[#c89b3c]/15 text-xs">
+                    <div>
+                      <strong className="font-bold text-[#0d4734]">{m.user?.name || 'Member'}</strong>
+                      <small className="block font-mono text-[10px] text-[#1c2421]/50">{m.user?.email}</small>
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-[#f6f3eb] text-[#0d4734] border border-[#c89b3c]/20">
                       {m.role.replaceAll('_', ' ')} · {m.status}
                     </span>
                   </div>
@@ -1327,35 +1352,37 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB: AUDIT LOGS (tenant_admin only) */}
-          {/* ----------------------------------------------------------------- */}
+          {/* TAB: AUDIT LOGS */}
           {tab === 'audit' && (
             <div className="space-y-6">
-              <div className="card-premium">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-[#c89b3c]/20 pb-4">
                   <div>
-                    <p className="eyebrow">Compliance & Security Trail</p>
-                    <h2 className="text-2xl font-bold">Tenant Audit Logs</h2>
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                      SECURITY & COMPLIANCE
+                    </span>
+                    <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                      Tenant Audit Trail
+                    </h2>
                   </div>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-semibold">
-                    {filteredAuditEvents.length} events logged
+                  <span className="text-[9px] font-mono font-bold text-[#0d4734] bg-[#e4efe9] px-3 py-1 rounded-full">
+                    {filteredAuditEvents.length} EVENTS LOGGED
                   </span>
                 </div>
 
-                {/* Search & Category Filter Controls */}
+                {/* Search & Filter */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
                   <div className="sm:col-span-2">
                     <input
-                      className="input-field text-sm"
-                      placeholder="Search action, summary, actor, target, IP, request ID..."
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      placeholder="SEARCH ACTION, SUMMARY, ACTOR, IP..."
                       value={auditSearch}
                       onChange={(e) => setAuditSearch(e.target.value)}
                     />
                   </div>
                   <div>
                     <select
-                      className="input-field text-sm"
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                       value={auditCategoryFilter}
                       onChange={(e) => setAuditCategoryFilter(e.target.value)}
                     >
@@ -1369,11 +1396,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Audit Trail Table */}
+                {/* Audit Table */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b text-slate-500 font-semibold uppercase">
+                      <tr className="border-b border-[#c89b3c]/20 text-[#1c2421]/50 uppercase text-[9px] font-black tracking-widest">
                         <th className="py-2.5 px-2">Timestamp</th>
                         <th className="py-2.5 px-2">Actor</th>
                         <th className="py-2.5 px-2">Action</th>
@@ -1384,48 +1411,45 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {filteredAuditEvents.map((ev) => (
-                        <tr key={ev.audit_id} className="border-b hover:bg-slate-50/50">
-                          <td className="py-2.5 px-2 text-slate-500 whitespace-nowrap">
+                        <tr key={ev.audit_id} className="border-b border-[#c89b3c]/10 hover:bg-[#f6f3eb]/40">
+                          <td className="py-2.5 px-2 text-[#1c2421]/60 font-mono text-[10px] whitespace-nowrap">
                             {new Date(ev.created_at).toLocaleString([], {
                               month: 'short',
                               day: 'numeric',
                               hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
+                              minute: '2-digit'
                             })}
                           </td>
-                          <td className="py-2.5 px-2 font-semibold">
+                          <td className="py-2.5 px-2 font-bold text-[#0d4734]">
                             {ev.actor ? (
                               <span>
                                 {ev.actor.name}
-                                <span className="block text-[10px] text-slate-400 font-normal">
+                                <span className="block font-mono text-[9px] text-[#1c2421]/50 font-normal">
                                   {ev.actor.email}
                                 </span>
                               </span>
                             ) : (
-                              <span className="text-slate-400">System / Anonymous</span>
+                              <span className="text-[#1c2421]/40">System / Anonymous</span>
                             )}
                           </td>
                           <td className="py-2.5 px-2">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                 ev.action.includes('created') || ev.action.includes('recorded')
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-[#e4efe9] text-[#0d4734]'
                                   : ev.action.includes('reconciled')
-                                  ? 'bg-teal-100 text-teal-800'
-                                  : ev.action.includes('deleted') || ev.action.includes('cancelled')
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-blue-100 text-blue-800'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-blue-100 text-blue-900'
                               }`}
                             >
                               {ev.action}
                             </span>
                           </td>
-                          <td className="py-2.5 px-2 font-semibold text-slate-700">
+                          <td className="py-2.5 px-2 font-mono text-[10px] text-[#1c2421]/70">
                             {ev.target_type} {ev.target_id ? `#${ev.target_id}` : ''}
                           </td>
-                          <td className="py-2.5 px-2 text-slate-600 max-w-xs">{ev.summary}</td>
-                          <td className="py-2.5 px-2 font-mono text-[10px] text-slate-400">
+                          <td className="py-2.5 px-2 text-[#1c2421]/80 max-w-xs">{ev.summary}</td>
+                          <td className="py-2.5 px-2 font-mono text-[9px] text-[#1c2421]/50">
                             <div>{ev.ip_address || '—'}</div>
                             <div className="truncate max-w-[120px]">{ev.request_id || ''}</div>
                           </td>
@@ -1433,7 +1457,7 @@ export default function AdminDashboard() {
                       ))}
                       {filteredAuditEvents.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-400">
+                          <td colSpan={6} className="py-8 text-center text-xs font-mono uppercase text-[#1c2421]/50">
                             No audit events found.
                           </td>
                         </tr>
@@ -1445,64 +1469,71 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
           {/* TAB: MOSQUE SETTINGS */}
-          {/* ----------------------------------------------------------------- */}
           {tab === 'settings' && mosque && (
-            <form onSubmit={saveSettings} className="card-premium space-y-4">
-              <p className="eyebrow">Tenant identity</p>
-              <h2 className="text-2xl font-bold">Mosque Settings</h2>
+            <form onSubmit={saveSettings} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                CONFIGURATION & BRAND
+              </span>
+              <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                Mosque Settings
+              </h2>
               <input
-                className="input-field"
+                className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                 value={mosque.name}
                 onChange={(e) => setMosque({ ...mosque, name: e.target.value })}
-                placeholder="Mosque Name"
+                placeholder="MOSQUE NAME"
                 required
               />
               <input
-                className="input-field"
+                className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                 value={mosque.address || ''}
                 onChange={(e) => setMosque({ ...mosque, address: e.target.value })}
-                placeholder="Physical Address"
+                placeholder="PHYSICAL ADDRESS"
               />
               <div className="grid sm:grid-cols-2 gap-4">
                 <input
-                  className="input-field"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   value={mosque.email || ''}
                   onChange={(e) => setMosque({ ...mosque, email: e.target.value })}
-                  placeholder="Contact email"
+                  placeholder="CONTACT EMAIL"
                 />
                 <input
-                  className="input-field"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   value={mosque.phone || ''}
                   onChange={(e) => setMosque({ ...mosque, phone: e.target.value })}
-                  placeholder="Phone"
+                  placeholder="PHONE"
                 />
                 <input
-                  className="input-field"
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
                   value={mosque.timezone}
                   onChange={(e) => setMosque({ ...mosque, timezone: e.target.value })}
-                  placeholder="Timezone (e.g. UTC, Africa/Lagos)"
+                  placeholder="TIMEZONE (E.G. AFRICA/LAGOS)"
                 />
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
-                    Brand Color Theme
+                  <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                    Brand Color Indicator
                   </label>
                   <input
-                    className="input-field h-10 p-1"
+                    className="w-full h-10 p-1 bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] cursor-pointer"
                     type="color"
-                    value={mosque.brand_color || '#087f5b'}
+                    value={mosque.brand_color || '#0d4734'}
                     onChange={(e) => setMosque({ ...mosque, brand_color: e.target.value })}
                   />
                 </div>
               </div>
-              <button type="submit" className="btn-primary">
-                Save settings
+              <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
+                SAVE MOSQUE SETTINGS →
               </button>
             </form>
           )}
         </section>
       </div>
-    </main>
+
+      {/* Footer */}
+      <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
+        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+      </footer>
+    </div>
   );
 }

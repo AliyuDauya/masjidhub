@@ -85,14 +85,14 @@ export default function NotificationCenter({ slug, className = '' }: Notificatio
 
   return (
     <div className={`relative inline-block ${className}`} ref={dropdownRef}>
-      {/* Bell Button with Badge */}
+      {/* Bell Button with Gold Accent & Badge */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={`Notifications (${unreadCount} unread)`}
-        className="relative p-2 text-slate-700 dark:text-slate-200 hover:text-emerald-700 dark:hover:text-emerald-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center"
+        className="relative p-2.5 text-[#0d4734] hover:text-[#c89b3c] rounded-full hover:bg-[#f6f3eb] transition-all flex items-center justify-center border border-[#c89b3c]/20"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -101,7 +101,7 @@ export default function NotificationCenter({ slug, className = '' }: Notificatio
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-600 rounded-full border-2 border-white dark:border-slate-900">
+          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[9px] font-black text-white bg-[#0d4734] border-2 border-[#c89b3c] rounded-full shadow-xs">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -109,14 +109,16 @@ export default function NotificationCenter({ slug, className = '' }: Notificatio
 
       {/* Popover Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden text-left">
+        <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-[12px] shadow-2xl border-2 border-[#c89b3c]/30 z-50 overflow-hidden text-left animate-fade-in font-sans">
           {/* Header */}
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+          <div className="px-5 py-3.5 border-b border-[#c89b3c]/20 flex items-center justify-between bg-[#f6f3eb]">
             <div className="flex items-center space-x-2">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Notifications</h3>
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734]">
+                DISPATCHES
+              </span>
               {unreadCount > 0 && (
-                <span className="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-full">
-                  {unreadCount} new
+                <span className="text-[9px] bg-[#0d4734] text-white font-black px-2 py-0.5 rounded-full">
+                  {unreadCount} NEW
                 </span>
               )}
             </div>
@@ -124,20 +126,22 @@ export default function NotificationCenter({ slug, className = '' }: Notificatio
               <button
                 type="button"
                 onClick={markAllAsRead}
-                className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                className="text-[9px] text-[#c89b3c] font-black uppercase tracking-widest hover:underline"
               >
-                Mark all as read
+                Mark all read
               </button>
             )}
           </div>
 
           {/* Body */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="max-h-80 overflow-y-auto divide-y divide-[#c89b3c]/15">
             {loading && notifications.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">Loading notifications…</div>
+              <div className="p-8 text-center text-xs font-bold uppercase tracking-wider text-[#1c2421]/50">
+                Loading notifications…
+              </div>
             ) : notifications.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500">
-                No notifications in your inbox.
+              <div className="p-8 text-center text-xs font-bold uppercase tracking-wider text-[#1c2421]/50">
+                No active notifications in your inbox.
               </div>
             ) : (
               notifications.map((notif) => (
@@ -146,30 +150,30 @@ export default function NotificationCenter({ slug, className = '' }: Notificatio
                   onClick={() => !notif.is_read && markAsRead(notif.notif_id)}
                   className={`p-4 transition-colors cursor-pointer flex items-start space-x-3 ${
                     notif.is_read
-                      ? 'bg-white dark:bg-slate-900 opacity-75 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                      : 'bg-emerald-50/40 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                      ? 'bg-white opacity-70 hover:bg-[#fcfbfa]'
+                      : 'bg-[#f6f3eb] hover:bg-[#faf6ee]'
                   }`}
                 >
                   <span
-                    className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
-                      notif.is_read ? 'bg-transparent' : 'bg-emerald-500'
+                    className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
+                      notif.is_read ? 'bg-transparent' : 'bg-[#c89b3c]'
                     }`}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[#0d4734]">
                         {notif.type}
                       </span>
-                      <time className="text-[10px] text-slate-400">
+                      <time className="text-[9px] font-mono text-[#1c2421]/50">
                         {new Date(notif.created_at).toLocaleDateString([], {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
-                          minute: '2-digit'
+                          minute: '2-digit',
                         })}
                       </time>
                     </div>
-                    <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed break-words">
+                    <p className="text-xs text-[#1c2421]/80 leading-relaxed font-normal break-words">
                       {notif.message}
                     </p>
                   </div>

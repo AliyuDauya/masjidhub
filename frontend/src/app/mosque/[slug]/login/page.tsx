@@ -1,91 +1,66 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { api, setToken } from '@/lib/api';
+import { useParams } from 'next/navigation';
+import RoleBasedLoginForm, { MosqueOption } from '@/components/auth/RoleBasedLoginForm';
+import { api } from '@/lib/api';
 
-export default function MosqueLogin() {
+export default function MosqueLoginPage() {
   const params = useParams();
-  const router = useRouter();
   const slug = typeof params?.slug === 'string' ? params.slug : 'al-noor';
+  const [currentMosqueName, setCurrentMosqueName] = useState('');
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    if (!email || !password) {
-      setErrorMsg('Please enter both email and password.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const result = await api<{ token: string; membership: { role: string } }>(slug, '/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      setToken(slug, result.token);
-      setSuccessMsg('Signed in. Opening your mosque workspace…');
-      router.push(result.membership.role === 'member' ? `/mosque/${slug}/programs` : `/mosque/${slug}/admin`);
-    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Sign-in failed.'); }
-    finally { setIsSubmitting(false); }
-  };
+  useEffect(() => {
+    api<MosqueOption[]>(null, '/api/mosques')
+      .then((data) => {
+        if (data && Array.isArray(data)) {
+          const found = data.find((m) => m.slug === slug);
+          if (found) setCurrentMosqueName(found.name);
+        }
+      })
+      .catch(() => {});
+  }, [slug]);
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
-      <div className="card-premium max-w-md w-full animate-fade-in">
-        <div className="text-center mb-8">
-          <Link href={`/mosque/${slug}`} className="text-sm font-semibold text-emerald-600 dark:text-emerald-500 hover:underline">
-            ← Back to Mosque Portal
+    <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
+      {/* 80px Glassmorphism Header */}
+      <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/mosque/${slug}`}
+            className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3"
+          >
+            <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
+            <span>MASJIDHUB</span>
           </Link>
-          <h2 className="text-3xl font-extrabold mt-4 text-slate-800 dark:text-white">Welcome Back</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Sign in to your member account</p>
+          <span className="text-[#c89b3c]/40 hidden sm:inline">/</span>
+          <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] hidden sm:inline">
+            PORTAL AUTHENTICATION
+          </span>
         </div>
+        <Link
+          href={`/mosque/${slug}`}
+          className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734] hover:text-[#c89b3c] transition-colors"
+        >
+          &larr; BACK TO MOSQUE
+        </Link>
+      </header>
 
-        {errorMsg && <p className="mb-4 text-sm font-semibold text-red-500 text-center">{errorMsg}</p>}
-        {successMsg && <p className="mb-4 text-sm font-semibold text-green-500 text-center">{successMsg}</p>}
+      {/* Main Login Workspace */}
+      <main className="max-w-5xl mx-auto px-6 py-12 flex-grow w-full flex items-center justify-center">
+        <RoleBasedLoginForm
+          initialRole="member"
+          defaultSlug={slug}
+          isMosquePortal={true}
+          currentMosqueName={currentMosqueName}
+        />
+      </main>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              className="input-field"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-300">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input-field"
-              required
-            />
-          </div>
-
-          <button type="submit" disabled={isSubmitting} className="btn-primary w-full mt-4">
-            {isSubmitting ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-slate-500 mt-6">
-          Don't have an account?{' '}
-          <Link href={`/mosque/${slug}/register`} className="text-emerald-600 dark:text-emerald-500 font-semibold hover:underline">
-            Register here
-          </Link>
-        </p>
-      </div>
-    </main>
+      {/* Footer */}
+      <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
+        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+      </footer>
+    </div>
   );
 }

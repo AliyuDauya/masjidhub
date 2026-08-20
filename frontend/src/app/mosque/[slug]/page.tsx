@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { useParams, useRouter } from 'next/navigation';
+import { api, setToken } from '@/lib/api';
 import NotificationCenter from '@/components/NotificationCenter';
 
 interface Mosque {
@@ -23,196 +23,330 @@ interface Announcement {
   posted_at: string;
 }
 
+interface UserMe {
+  user_id: number;
+  name: string;
+  email: string;
+  memberships: Array<{
+    membership_id: number;
+    role: string;
+    status: string;
+    mosque: { mosque_id: number; slug: string; name: string };
+  }>;
+}
+
 export default function MosquePortal() {
   const params = useParams();
+  const router = useRouter();
   const slug = typeof params?.slug === 'string' ? params.slug : 'al-noor';
+
   const [mosque, setMosque] = useState<Mosque | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserMe | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinSuccess, setJoinSuccess] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // 1. Fetch mosque info
     api<Mosque>(null, `/api/mosques/${slug}`)
       .then(setMosque)
       .catch((e) => setError(e.message));
+
+    // 2. Fetch announcements
     api<Announcement[]>(slug, '/api/announcements')
       .then(setAnnouncements)
       .catch((e) => setError(e.message));
+
+    // 3. Fetch current authenticated user if logged in
+    api<UserMe>(slug, '/api/auth/me')
+      .then(setCurrentUser)
+      .catch(() => setCurrentUser(null));
   }, [slug]);
 
+  const isMemberOfCurrentMosque = currentUser?.memberships?.some(
+    (m) => m.mosque?.slug === slug && m.status === 'Active'
+  );
+
+  async function handleOneClickJoin() {
+    if (!currentUser) {
+      router.push(`/mosque/${slug}/register`);
+      return;
+    }
+    setIsJoining(true);
+    setError('');
+    try {
+      const res = await api<{ success: boolean; message: string; token: string }>(
+        slug,
+        '/api/members/join',
+        { method: 'POST' }
+      );
+      if (res.token) {
+        setToken(slug, res.token);
+      }
+      setJoinSuccess(`You have joined ${mosque?.name || slug} congregation!`);
+      // Refresh user memberships
+      const me = await api<UserMe>(slug, '/api/auth/me');
+      setCurrentUser(me);
+      setTimeout(() => {
+        router.push(`/mosque/${slug}/dashboard`);
+      }, 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not join mosque.');
+    } finally {
+      setIsJoining(false);
+    }
+  }
+
   const prayerTimes = [
-    ['Fajr', '05:15'],
-    ['Dhuhr', '13:00'],
-    ['Asr', '16:30'],
-    ['Maghrib', '19:12'],
-    ['Isha', '20:45'],
+    ['Fajr', '05:15 AM'],
+    ['Dhuhr', '01:00 PM'],
+    ['Asr', '04:30 PM'],
+    ['Maghrib', '07:12 PM'],
+    ['Isha', '08:45 PM'],
   ];
 
   return (
-    <div className="relative min-h-screen bg-[#f7f6f2] text-[#1c1c1c] overflow-x-hidden selection:bg-[#3d7068] selection:text-white">
-      {/* 40px Background Grid */}
-      <div className="editorial-grid-bg" aria-hidden="true" />
+    <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
+      {/* 80px Glassmorphism Navigation Header */}
+      <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
+            <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
+            <span>MASJIDHUB</span>
+          </Link>
+          <span className="text-[#c89b3c]/40 hidden sm:inline">/</span>
+          <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] hidden sm:inline">
+            {slug}
+          </span>
+        </div>
 
-      {/* Guide lines */}
-      <div className="guide-line guide-line-25 hidden md:block" aria-hidden="true" />
-      <div className="guide-line guide-line-50 hidden md:block" aria-hidden="true" />
-      <div className="guide-line guide-line-75 hidden md:block" aria-hidden="true" />
-
-      {/* Header Band */}
-      <header className="relative z-10 bg-white border-b-arch px-6 md:px-12 py-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div>
-            <div className="flex items-center space-x-3 mb-2">
-              <Link href="/" className="eyebrow-mono hover:underline">
-                MASJIDHUB INDEX
+        <div className="flex items-center gap-3">
+          <NotificationCenter slug={slug} />
+          {currentUser ? (
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/mosque/${slug}/dashboard`}
+                className="btn-pill-cta py-2 px-5 text-[9px] tracking-ultra-wide"
+              >
+                MEMBER DASHBOARD
               </Link>
-              <span className="text-[#e5e4de]">/</span>
-              <span className="mono text-[10px] uppercase tracking-[0.25em] text-[#666666]">
-                {slug}
-              </span>
             </div>
-            <h1 className="serif text-3xl sm:text-4xl md:text-5xl uppercase font-light tracking-tight text-[#1c1c1c]">
-              {mosque?.name || 'LOADING MOSQUE…'}
-            </h1>
-            <p className="text-xs sm:text-sm text-[#666666] mono uppercase tracking-[0.15em] mt-1">
-              {mosque?.address || 'Address unlisted'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <NotificationCenter slug={slug} />
-            <Link
-              href={`/mosque/${slug}/login`}
-              className="btn-editorial-secondary"
-            >
-              ADMIN SIGN IN
-            </Link>
-            <Link
-              href={`/mosque/${slug}/register`}
-              className="btn-editorial-cta"
-            >
-              JOIN MOSQUE
-            </Link>
-          </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/mosque/${slug}/login`}
+                className="btn-pill-secondary py-2.5 px-5 text-[9px] tracking-ultra-wide"
+              >
+                SIGN IN
+              </Link>
+              <Link
+                href={`/mosque/${slug}/register`}
+                className="btn-pill-cta py-2.5 px-5 text-[9px] tracking-ultra-wide"
+              >
+                JOIN MOSQUE
+              </Link>
+            </div>
+          )}
         </div>
       </header>
 
-      {/* Portal Main Grid */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-16 grid grid-cols-1 lg:grid-cols-12 gap-12">
-        {/* Left Column: Prayer Timetable */}
-        <aside className="lg:col-span-4 space-y-8">
-          <div className="card-editorial p-8 bg-white border-arch radius-arch shadow-xs">
-            <div className="flex items-center justify-between border-b-arch pb-4 mb-6">
-              <span className="eyebrow-mono">01 / DAILY IQAMAH</span>
-              <span className="w-2 h-2 rounded-full bg-[#3d7068]" />
+      {/* Mosque Banner Hero */}
+      <section className="bg-[#f6f3eb] border-b border-[#c89b3c]/20 py-16 px-8 md:px-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+                VERIFIED SOVEREIGN TENANT
+              </span>
+              {isMemberOfCurrentMosque && (
+                <span className="text-[9px] font-black uppercase tracking-widest bg-[#e4efe9] text-[#0d4734] px-2.5 py-0.5 rounded-full border border-[#0d4734]/20">
+                  ✓ CONGREGATION MEMBER
+                </span>
+              )}
             </div>
-
-            <h2 className="serif text-2xl uppercase font-light mb-6">Prayer Schedule</h2>
-
-            <ul className="space-y-4 divide-y divide-[#e5e4de]">
-              {prayerTimes.map(([name, time]) => (
-                <li key={name} className="flex justify-between items-center pt-4">
-                  <span className="mono text-xs uppercase tracking-[0.2em] font-bold text-[#1c1c1c]">
-                    {name}
-                  </span>
-                  <time className="mono text-sm font-bold text-[#3d7068] tracking-widest bg-[#f7f6f2] px-3 py-1 border-arch radius-arch">
-                    {time}
-                  </time>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-8 pt-6 border-t-arch flex justify-between items-center mono text-[9px] uppercase tracking-[0.2em] text-[#888888]">
-              <span>TIMEZONE</span>
-              <span>{mosque?.timezone || 'UTC'}</span>
-            </div>
+            <h1 className="text-4xl sm:text-6xl font-black uppercase tracking-tighter text-[#0d4734]">
+              {mosque?.name || 'LOADING MOSQUE…'}
+            </h1>
+            <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[#1c2421]/60 mt-2">
+              📍 {mosque?.address || 'Address unlisted'} • TIMEZONE: {mosque?.timezone || 'Africa/Lagos'}
+            </p>
           </div>
-        </aside>
 
-        {/* Right Column: Giving, Programs & Announcements */}
-        <section className="lg:col-span-8 space-y-10">
-          {/* Action Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="flex flex-wrap gap-3">
+            {currentUser && !isMemberOfCurrentMosque && (
+              <button
+                onClick={handleOneClickJoin}
+                disabled={isJoining}
+                className="btn-pill-gold py-3 px-6 text-[9px] tracking-ultra-wide"
+              >
+                {isJoining ? 'JOINING MOSQUE…' : '+ 1-CLICK JOIN THIS MOSQUE'}
+              </button>
+            )}
+
+            <Link
+              href={`/mosque/${slug}/dashboard`}
+              className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide"
+            >
+              OPEN MEMBER DASHBOARD
+            </Link>
             <Link
               href={`/mosque/${slug}/donations`}
-              className="card-editorial p-8 bg-white border-arch radius-arch block group"
+              className="btn-pill-gold py-3 px-6 text-[9px] tracking-ultra-wide"
             >
-              <span className="eyebrow-mono mb-2 block">02 / DONATIONS</span>
-              <h3 className="serif text-2xl uppercase font-light group-hover:text-[#3d7068] transition-colors mb-2">
-                Digital Giving
-              </h3>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                Direct, transparent contributions with automated tax receipting.
-              </p>
+              GIVE SADAQAH / ZAKAT
             </Link>
-
             <Link
               href={`/mosque/${slug}/programs`}
-              className="card-editorial p-8 bg-white border-arch radius-arch block group"
+              className="btn-pill-secondary py-3 px-6 text-[9px] tracking-ultra-wide"
             >
-              <span className="eyebrow-mono mb-2 block">03 / PROGRAMMES</span>
-              <h3 className="serif text-2xl uppercase font-light group-hover:text-[#3d7068] transition-colors mb-2">
-                Education & Circles
+              BROWSE CLASSES
+            </Link>
+          </div>
+        </div>
+
+        {/* Global Join Success Alert */}
+        {joinSuccess && (
+          <div className="max-w-7xl mx-auto mt-6 p-4 bg-[#e4efe9] border border-[#0d4734] text-[#0d4734] text-xs font-bold uppercase rounded-[8px] animate-fade-in">
+            ✓ {joinSuccess} Opening your Member Dashboard…
+          </div>
+        )}
+      </section>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-6 md:px-12 py-16 flex-grow w-full space-y-16">
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold uppercase rounded-[6px]">
+            {error}
+          </div>
+        )}
+
+        {/* Prayer Times Grid */}
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 border-b border-[#c89b3c]/20 pb-4">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                PRAYER SYNCHRONICITY
+              </span>
+              <h2 className="text-3xl font-black uppercase tracking-tight text-[#0d4734]">
+                Daily Iqamah Timetable
+              </h2>
+            </div>
+            <p className="text-[10px] font-mono uppercase text-[#1c2421]/60">
+              Live Verified Synchronization
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {prayerTimes.map(([name, time]) => (
+              <div
+                key={name}
+                className="bg-white p-6 rounded-[12px] border-2 border-[#c89b3c]/25 hover:border-[#0d4734] transition-all shadow-xs text-center space-y-2 group"
+              >
+                <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block group-hover:text-[#0d4734] transition-colors">
+                  {name}
+                </span>
+                <p className="text-2xl sm:text-3xl font-black text-[#0d4734] tracking-tight">
+                  {time}
+                </p>
+                <span className="text-[9px] font-mono text-[#1c2421]/40 block uppercase">
+                  Congregation Iqamah
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Action Blocks: Stewardship & Programmes */}
+        <section className="grid md:grid-cols-2 gap-8">
+          {/* Stewardship Card */}
+          <div className="service-card rounded-[16px] flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <span className="service-num text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+                01 / STEWARDSHIP & GIVING
+              </span>
+              <h3 className="text-3xl font-black uppercase tracking-tight text-[#0d4734]">
+                Zakat & Sadaqah
               </h3>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                Browse upcoming gatherings, reserve attendance, and stay informed.
+              <p className="text-xs text-[#1c2421]/75 leading-relaxed font-normal">
+                Contribute directly to sovereign mosque operational funds, designated Zakat al-Mal accounts, and emergency community aid with instant cryptographic receipts.
               </p>
+            </div>
+            <Link href={`/mosque/${slug}/donations`} className="arrow-cta">
+              DONATE TO MOSQUE
             </Link>
           </div>
 
-          {/* Announcements Feed */}
-          <div className="card-editorial p-8 md:p-10 bg-white border-arch radius-arch shadow-xs">
-            <div className="flex items-center justify-between border-b-arch pb-4 mb-8">
-              <span className="eyebrow-mono">04 / COMMUNITY NOTICEBOARD</span>
-              <span className="mono text-[10px] uppercase tracking-[0.2em] text-[#888888]">
-                {announcements.length} NOTICES
+          {/* Programmes Card */}
+          <div className="service-card rounded-[16px] flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <span className="service-num text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+                02 / KNOWLEDGE & CIRCLES
               </span>
+              <h3 className="text-3xl font-black uppercase tracking-tight text-[#0d4734]">
+                Learning Programmes
+              </h3>
+              <p className="text-xs text-[#1c2421]/75 leading-relaxed font-normal">
+                Discover weekly Tafseer circles, youth leadership intensives, Sisters halaqahs, and Quranic recitation circles hosted at our facilities.
+              </p>
             </div>
-
-            <h2 className="serif text-3xl uppercase font-light mb-8">Latest Dispatches</h2>
-
-            {error && (
-              <div className="p-4 border-arch border-red-300 bg-red-50 text-red-700 mono text-xs uppercase mb-6">
-                {error}
-              </div>
-            )}
-
-            {announcements.length === 0 ? (
-              <div className="py-12 text-center border-arch bg-[#f7f6f2] radius-arch">
-                <p className="mono text-xs uppercase tracking-[0.2em] text-[#666666]">
-                  No public announcements currently active for this mosque.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-8 divide-y divide-[#e5e4de]">
-                {announcements.map((a) => (
-                  <article key={a.announcement_id} className="pt-8 first:pt-0">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <span className="mono text-[9px] uppercase tracking-[0.25em] text-[#3d7068] font-bold px-2 py-0.5 bg-[#f7f6f2] border-arch">
-                        {a.category}
-                      </span>
-                      <span className="mono text-[9px] uppercase tracking-[0.2em] text-[#888888]">
-                        {new Date(a.posted_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h3 className="serif text-2xl uppercase font-light text-[#1c1c1c] mb-3">
-                      {a.title}
-                    </h3>
-                    <p className="text-sm text-[#555555] leading-relaxed">
-                      {a.content}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
+            <Link href={`/mosque/${slug}/programs`} className="arrow-cta">
+              BROWSE TIMETABLE
+            </Link>
           </div>
+        </section>
+
+        {/* Notices & Dispatches */}
+        <section className="bg-white p-8 md:p-12 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 border-b border-[#c89b3c]/20 pb-4">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                COMMUNITY NOTICEBOARD
+              </span>
+              <h2 className="text-3xl font-black uppercase tracking-tight text-[#0d4734]">
+                Latest Dispatches
+              </h2>
+            </div>
+            <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">
+              {announcements.length} Published Updates
+            </span>
+          </div>
+
+          {announcements.length === 0 ? (
+            <p className="text-xs font-mono uppercase text-[#1c2421]/50 py-6 text-center">
+              No recent dispatches published.
+            </p>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-6">
+              {announcements.map((a) => (
+                <article
+                  key={a.announcement_id}
+                  className="p-6 bg-[#f6f3eb] rounded-[12px] border border-[#c89b3c]/20 hover:border-[#0d4734] transition-all space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-[#0d4734] bg-[#e4efe9] px-2 py-0.5 rounded">
+                      {a.category}
+                    </span>
+                    <span className="text-[9px] font-mono text-[#1c2421]/50">
+                      {new Date(a.posted_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h4 className="text-lg font-black uppercase tracking-tight text-[#0d4734]">
+                    {a.title}
+                  </h4>
+                  <p className="text-xs text-[#1c2421]/70 leading-relaxed font-normal">
+                    {a.content}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
-      {/* Portal Footer */}
-      <footer className="relative z-10 py-12 border-t-arch bg-white text-center mono text-[10px] uppercase tracking-[0.25em] text-[#888888]">
-        <div className="max-w-7xl mx-auto px-6">
-          <span>{mosque?.name || 'MASJID'} · POWERED BY MASJIDHUB EDITORIAL ENGINE</span>
-        </div>
+      {/* Footer */}
+      <footer className="py-8 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/50">
+        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );

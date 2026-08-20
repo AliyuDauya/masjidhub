@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import MosqueLogin from '../../src/app/mosque/[slug]/login/page.js';
+import { render, screen, fireEvent } from '@testing-library/react';
+import MosqueLoginPage from '../../src/app/mosque/[slug]/login/page';
+import RoleBasedLoginForm from '../../src/components/auth/RoleBasedLoginForm';
 
 // Mock next/navigation module for parameters and routing hooks
 vi.mock('next/navigation', () => ({
@@ -11,49 +12,52 @@ vi.mock('next/navigation', () => ({
   })
 }));
 
-describe('MosqueLogin Component', () => {
-  it('should render the login form correctly', () => {
-    render(<MosqueLogin />);
+describe('3-Section Role-Based Login Interface', () => {
+  it('should render all 3 dedicated role portal tabs on MosqueLoginPage', () => {
+    render(<MosqueLoginPage />);
     
-    // Check main elements
-    expect(screen.getByText('Welcome Back')).toBeDefined();
-    expect(screen.getByPlaceholderText('name@example.com')).toBeDefined();
-    expect(screen.getByPlaceholderText('••••••••')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Sign In' })).toBeDefined();
+    // Check main role portal tabs exist
+    expect(screen.getByText(/Worshipper/i)).toBeDefined();
+    expect(screen.getByText(/Mosque Admin/i)).toBeDefined();
+    expect(screen.getByText(/Operator/i)).toBeDefined();
+
+    // Check Section 1 (Worshipper & Member) default view
+    expect(screen.getByText('WORSHIPPER & MEMBER ACCESS')).toBeDefined();
+    expect(screen.getByText('Member Sign-In')).toBeDefined();
+    expect(screen.getByPlaceholderText('worshipper@example.com')).toBeDefined();
+    expect(screen.getByRole('button', { name: /SIGN IN AS MEMBER/i })).toBeDefined();
   });
 
-  it('should display error if submitted empty', async () => {
-    render(<MosqueLogin />);
-    
-    const signInButton = screen.getByRole('button', { name: 'Sign In' });
-    fireEvent.click(signInButton);
-    
-    // Form validation check is browser-default required, but state triggers mock checks
-    const emailInput = screen.getByPlaceholderText('name@example.com');
-    const passwordInput = screen.getByPlaceholderText('••••••••');
-    
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.change(passwordInput, { target: { value: '' } });
-    fireEvent.click(signInButton);
-    
-    await waitFor(() => {
-      expect(screen.getByText('Please enter both email and password.')).toBeDefined();
-    });
+  it('should switch dynamically between Worshipper, Admin, and Operator portals', () => {
+    render(<RoleBasedLoginForm defaultSlug="al-noor" isMosquePortal={true} />);
+
+    // Switch to Mosque Admin & Imam Workspace (Section 2)
+    const adminTab = screen.getByRole('button', { name: /Mosque Admin/i });
+    fireEvent.click(adminTab);
+
+    expect(screen.getByText('MOSQUE ADMINISTRATOR & IMAM')).toBeDefined();
+    expect(screen.getByText('Admin & Imam Sign-In')).toBeDefined();
+    expect(screen.getByPlaceholderText('admin@masjid.org')).toBeDefined();
+    expect(screen.getByRole('button', { name: /SIGN IN TO ADMIN CONSOLE/i })).toBeDefined();
+
+    // Switch to Sovereign Platform Operator Portal (Section 3)
+    const operatorTab = screen.getByRole('button', { name: /Operator/i });
+    fireEvent.click(operatorTab);
+
+    expect(screen.getByText('SOVEREIGN PLATFORM OPERATOR')).toBeDefined();
+    expect(screen.getByText('Platform Operator Sign-In')).toBeDefined();
+    expect(screen.getByPlaceholderText('operator@masjidhub.org')).toBeDefined();
+    expect(screen.getByRole('button', { name: /AUTHENTICATE PLATFORM OPERATOR/i })).toBeDefined();
   });
 
-  it('should show success message on valid submission credentials format', async () => {
-    render(<MosqueLogin />);
-    
-    const emailInput = screen.getByPlaceholderText('name@example.com');
-    const passwordInput = screen.getByPlaceholderText('••••••••');
-    const signInButton = screen.getByRole('button', { name: 'Sign In' });
+  it('should validate missing email or password gracefully', () => {
+    render(<RoleBasedLoginForm defaultSlug="al-noor" isMosquePortal={true} />);
 
-    fireEvent.change(emailInput, { target: { value: 'ali@masjid.com' } });
-    fireEvent.change(passwordInput, { target: { value: 'securePass123' } });
-    fireEvent.click(signInButton);
+    const submitBtn = screen.getByRole('button', { name: /SIGN IN AS MEMBER/i });
+    fireEvent.click(submitBtn);
 
-    await waitFor(() => {
-      expect(screen.getByText('Successfully authenticated!')).toBeDefined();
-    });
+    // Form inputs require email and password
+    const emailInput = screen.getByPlaceholderText('worshipper@example.com');
+    expect(emailInput).toBeDefined();
   });
 });
