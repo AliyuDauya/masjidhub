@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, clearToken } from '@/lib/api';
 import NotificationCenter from '@/components/NotificationCenter';
 
-export type Tab = 'overview' | 'announcements' | 'programs' | 'donations' | 'members' | 'audit' | 'settings';
+export type Tab = 'overview' | 'prayers' | 'announcements' | 'programs' | 'donations' | 'members' | 'audit' | 'settings';
 export type TenantRole = 'tenant_admin' | 'finance_officer' | 'programme_officer' | 'communications_officer' | 'member';
 
 interface Mosque {
@@ -110,24 +110,26 @@ interface UserMe {
 const ROLE_TABS: Record<TenantRole, Array<{ id: Tab; label: string }>> = {
   tenant_admin: [
     { id: 'overview', label: 'Overview' },
-    { id: 'programs', label: 'Programmes & Roster' },
-    { id: 'donations', label: 'Donations & Treasury' },
-    { id: 'announcements', label: 'Noticeboard' },
-    { id: 'members', label: 'People & Roles' },
-    { id: 'audit', label: 'Audit Logs' },
-    { id: 'settings', label: 'Settings' }
+    { id: 'prayers', label: '🕌 Prayer Timetable' },
+    { id: 'announcements', label: '📢 Noticeboard' },
+    { id: 'programs', label: '📖 Programmes & Roster' },
+    { id: 'donations', label: '💳 Donations & Treasury' },
+    { id: 'members', label: '👥 People & Roles' },
+    { id: 'audit', label: '🔒 Audit Logs' },
+    { id: 'settings', label: '⚙️ Mosque Profile' }
   ],
   finance_officer: [
     { id: 'overview', label: 'Overview' },
-    { id: 'donations', label: 'Donations & Treasury' }
+    { id: 'donations', label: '💳 Donations & Treasury' }
   ],
   programme_officer: [
     { id: 'overview', label: 'Overview' },
-    { id: 'programs', label: 'Programmes & Roster' }
+    { id: 'programs', label: '📖 Programmes & Roster' }
   ],
   communications_officer: [
     { id: 'overview', label: 'Overview' },
-    { id: 'announcements', label: 'Noticeboard' }
+    { id: 'prayers', label: '🕌 Prayer Timetable' },
+    { id: 'announcements', label: '📢 Noticeboard' }
   ],
   member: [{ id: 'overview', label: 'Overview' }]
 };
@@ -140,6 +142,8 @@ export default function MosqueAdmin() {
   const [tab, setTab] = useState<Tab>('overview');
   const [currentRole, setCurrentRole] = useState<TenantRole>('tenant_admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'unauthenticated' | 'forbidden' | 'authorized'>('checking');
+
 
   const [mosque, setMosque] = useState<Mosque | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
