@@ -20,8 +20,15 @@ model Mosque {
   logo_url                String?
   notification_email      Boolean        @default(true)
   notification_in_app     Boolean        @default(true)
+  fajr_time               String         @default("05:15 AM")
+  dhuhr_time              String         @default("01:00 PM")
+  asr_time                String         @default("04:30 PM")
+  maghrib_time            String         @default("07:15 PM")
+  isha_time               String         @default("08:30 PM")
+  jumua_time              String         @default("01:30 PM")
   created_at              DateTime       @default(now())
   updated_at              DateTime       @updatedAt
+
 
   memberships             Membership[]
   donations               Donation[]

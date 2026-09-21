@@ -17,6 +17,12 @@ interface Mosque {
   email?: string;
   timezone: string;
   brand_color: string;
+  fajr_time?: string;
+  dhuhr_time?: string;
+  asr_time?: string;
+  maghrib_time?: string;
+  isha_time?: string;
+  jumua_time?: string;
 }
 
 interface Announcement {
@@ -313,10 +319,16 @@ export default function MosqueAdmin() {
           email: mosque.email,
           phone: mosque.phone,
           timezone: mosque.timezone,
-          brand_color: mosque.brand_color
+          brand_color: mosque.brand_color,
+          fajr_time: mosque.fajr_time,
+          dhuhr_time: mosque.dhuhr_time,
+          asr_time: mosque.asr_time,
+          maghrib_time: mosque.maghrib_time,
+          isha_time: mosque.isha_time,
+          jumua_time: mosque.jumua_time,
         })
       });
-      done('Mosque settings saved.');
+      done('Mosque settings and prayer times updated successfully.');
       load();
     } catch (x) {
       setError(x instanceof Error ? x.message : 'Could not save settings.');
@@ -1469,63 +1481,154 @@ export default function MosqueAdmin() {
             </div>
           )}
 
-          {/* TAB: MOSQUE SETTINGS */}
+          {/* TAB: MOSQUE SETTINGS & PRAYER SCHEDULE */}
           {tab === 'settings' && mosque && (
-            <form onSubmit={saveSettings} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
-              <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
-                CONFIGURATION & BRAND
-              </span>
-              <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
-                Mosque Settings
-              </h2>
-              <input
-                className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
-                value={mosque.name}
-                onChange={(e) => setMosque({ ...mosque, name: e.target.value })}
-                placeholder="MOSQUE NAME"
-                required
-              />
-              <input
-                className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
-                value={mosque.address || ''}
-                onChange={(e) => setMosque({ ...mosque, address: e.target.value })}
-                placeholder="PHYSICAL ADDRESS"
-              />
-              <div className="grid sm:grid-cols-2 gap-4">
-                <input
-                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
-                  value={mosque.email || ''}
-                  onChange={(e) => setMosque({ ...mosque, email: e.target.value })}
-                  placeholder="CONTACT EMAIL"
-                />
-                <input
-                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
-                  value={mosque.phone || ''}
-                  onChange={(e) => setMosque({ ...mosque, phone: e.target.value })}
-                  placeholder="PHONE"
-                />
-                <input
-                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
-                  value={mosque.timezone}
-                  onChange={(e) => setMosque({ ...mosque, timezone: e.target.value })}
-                  placeholder="TIMEZONE (E.G. AFRICA/LAGOS)"
-                />
-                <div>
-                  <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
-                    Brand Color Indicator
-                  </label>
-                  <input
-                    className="w-full h-10 p-1 bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] cursor-pointer"
-                    type="color"
-                    value={mosque.brand_color || '#0d4734'}
-                    onChange={(e) => setMosque({ ...mosque, brand_color: e.target.value })}
-                  />
+            <div className="space-y-8">
+              {/* Prayer Schedule Manager */}
+              <form onSubmit={saveSettings} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-6">
+                <div className="border-b border-[#c89b3c]/20 pb-4">
+                  <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                    PRAYER SCHEDULE & IQAMAH TIMINGS
+                  </span>
+                  <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                    Daily Prayer & Jumu&apos;ah Timetable
+                  </h2>
+                  <p className="text-xs text-[#1c2421]/70 mt-1 font-normal">
+                    Update congregational (Iqamah) timings displayed on your public portal and attendee passes.
+                  </p>
                 </div>
-              </div>
-              <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
-                SAVE MOSQUE SETTINGS →
-              </button>
-            </form>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Fajr Iqamah
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.fajr_time || '05:15 AM'}
+                      onChange={(e) => setMosque({ ...mosque, fajr_time: e.target.value })}
+                      placeholder="05:15 AM"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Dhuhr Iqamah
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.dhuhr_time || '01:00 PM'}
+                      onChange={(e) => setMosque({ ...mosque, dhuhr_time: e.target.value })}
+                      placeholder="01:00 PM"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Asr Iqamah
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.asr_time || '04:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, asr_time: e.target.value })}
+                      placeholder="04:30 PM"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Maghrib
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.maghrib_time || '07:15 PM'}
+                      onChange={(e) => setMosque({ ...mosque, maghrib_time: e.target.value })}
+                      placeholder="07:15 PM"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Isha Iqamah
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.isha_time || '08:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, isha_time: e.target.value })}
+                      placeholder="08:30 PM"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#0d4734] block mb-1">
+                      Jumu&apos;ah Salah
+                    </label>
+                    <input
+                      className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.jumua_time || '01:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, jumua_time: e.target.value })}
+                      placeholder="01:30 PM"
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-pill-cta py-3 px-8 text-[9px] tracking-ultra-wide">
+                  SAVE PRAYER SCHEDULE →
+                </button>
+              </form>
+
+              {/* General Mosque Settings */}
+              <form onSubmit={saveSettings} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+                <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                  CONFIGURATION & BRAND
+                </span>
+                <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">
+                  Mosque Profile & Contact
+                </h2>
+                <input
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                  value={mosque.name}
+                  onChange={(e) => setMosque({ ...mosque, name: e.target.value })}
+                  placeholder="MOSQUE NAME"
+                  required
+                />
+                <input
+                  className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                  value={mosque.address || ''}
+                  onChange={(e) => setMosque({ ...mosque, address: e.target.value })}
+                  placeholder="PHYSICAL ADDRESS"
+                />
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <input
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                    value={mosque.email || ''}
+                    onChange={(e) => setMosque({ ...mosque, email: e.target.value })}
+                    placeholder="CONTACT EMAIL"
+                  />
+                  <input
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                    value={mosque.phone || ''}
+                    onChange={(e) => setMosque({ ...mosque, phone: e.target.value })}
+                    placeholder="PHONE"
+                  />
+                  <input
+                    className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-2.5 px-3 text-xs font-bold uppercase text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                    value={mosque.timezone}
+                    onChange={(e) => setMosque({ ...mosque, timezone: e.target.value })}
+                    placeholder="TIMEZONE (E.G. AFRICA/LAGOS)"
+                  />
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/60 block mb-1">
+                      Brand Color Indicator
+                    </label>
+                    <input
+                      className="w-full h-10 p-1 bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] cursor-pointer"
+                      type="color"
+                      value={mosque.brand_color || '#0d4734'}
+                      onChange={(e) => setMosque({ ...mosque, brand_color: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-pill-cta py-3 px-6 text-[9px] tracking-ultra-wide">
+                  SAVE MOSQUE PROFILE →
+                </button>
+              </form>
+            </div>
           )}
         </section>
       </div>

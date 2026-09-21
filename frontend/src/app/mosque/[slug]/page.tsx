@@ -13,6 +13,12 @@ interface Mosque {
   address?: string;
   brand_color: string;
   timezone: string;
+  fajr_time?: string;
+  dhuhr_time?: string;
+  asr_time?: string;
+  maghrib_time?: string;
+  isha_time?: string;
+  jumua_time?: string;
 }
 
 interface Announcement {
@@ -99,12 +105,14 @@ export default function MosquePortal() {
   }
 
   const prayerTimes = [
-    ['Fajr', '05:15 AM'],
-    ['Dhuhr', '01:00 PM'],
-    ['Asr', '04:30 PM'],
-    ['Maghrib', '07:12 PM'],
-    ['Isha', '08:45 PM'],
+    ['Fajr', mosque?.fajr_time || '05:15 AM'],
+    ['Dhuhr', mosque?.dhuhr_time || '01:00 PM'],
+    ['Asr', mosque?.asr_time || '04:30 PM'],
+    ['Maghrib', mosque?.maghrib_time || '07:15 PM'],
+    ['Isha', mosque?.isha_time || '08:30 PM'],
+    ['Jumu\'ah', mosque?.jumua_time || '01:30 PM'],
   ];
+
 
   return (
     <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">

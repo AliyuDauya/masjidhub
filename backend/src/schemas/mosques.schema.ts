@@ -45,8 +45,15 @@ export const updateMosqueSchema = {
       brand_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
       logo_url: { type: ['string', 'null'] },
       notification_email: { type: 'boolean' },
-      notification_in_app: { type: 'boolean' }
+      notification_in_app: { type: 'boolean' },
+      fajr_time: { type: 'string', maxLength: 20 },
+      dhuhr_time: { type: 'string', maxLength: 20 },
+      asr_time: { type: 'string', maxLength: 20 },
+      maghrib_time: { type: 'string', maxLength: 20 },
+      isha_time: { type: 'string', maxLength: 20 },
+      jumua_time: { type: 'string', maxLength: 20 }
     },
     additionalProperties: false
   }
 } as const;
+

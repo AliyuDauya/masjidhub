@@ -52,3 +52,31 @@ export const reconcileDonationSchema = {
     }
   }
 } as const;
+
+export const initializePaystackSchema = {
+  body: {
+    type: 'object',
+    required: ['amount', 'category', 'email'],
+    properties: {
+      amount: { type: 'number', minimum: 0.01 },
+      category: { type: 'string', enum: ['Zakat', 'Sadaqah', 'Waqf', 'General'] },
+      email: { type: 'string', maxLength: 255 },
+      currency: { type: 'string', minLength: 3, maxLength: 3 },
+      callback_url: { type: 'string', maxLength: 500 }
+    },
+    additionalProperties: false
+  }
+} as const;
+
+export const verifyPaystackSchema = {
+  body: {
+    type: 'object',
+    required: ['reference'],
+    properties: {
+      reference: { type: 'string', minLength: 1, maxLength: 100 },
+      category: { type: 'string', enum: ['Zakat', 'Sadaqah', 'Waqf', 'General'] }
+    },
+    additionalProperties: false
+  }
+} as const;
+

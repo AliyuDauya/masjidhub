@@ -71,7 +71,26 @@ export default async function mosqueRoutes(fastify: FastifyInstance) {
     const { slug } = request.params as { slug: string };
     const mosque = await fastify.prisma.mosque.findUnique({
       where: { slug: slug.toLowerCase() },
-      select: { mosque_id: true, name: true, slug: true, status: true, address: true, phone: true, email: true, timezone: true, brand_color: true, logo_url: true }
+      select: {
+        mosque_id: true,
+        name: true,
+        slug: true,
+        status: true,
+        address: true,
+        phone: true,
+        email: true,
+        timezone: true,
+        brand_color: true,
+        logo_url: true,
+        notification_email: true,
+        notification_in_app: true,
+        fajr_time: true,
+        dhuhr_time: true,
+        asr_time: true,
+        maghrib_time: true,
+        isha_time: true,
+        jumua_time: true
+      }
     });
     if (!mosque) return reply.status(404).send({ error: `Mosque with slug "${slug}" not found.` });
     reply.send(mosque);
@@ -81,7 +100,23 @@ export default async function mosqueRoutes(fastify: FastifyInstance) {
     schema: updateMosqueSchema,
     preHandler: [tenantHook, fastify.adminOnly]
   }, async (request, reply) => {
-    const body = request.body as Partial<{ name: string; address: string; phone: string; email: string; timezone: string; brand_color: string; logo_url: string; notification_email: boolean; notification_in_app: boolean }>;
+    const body = request.body as Partial<{
+      name: string;
+      address: string;
+      phone: string;
+      email: string;
+      timezone: string;
+      brand_color: string;
+      logo_url: string;
+      notification_email: boolean;
+      notification_in_app: boolean;
+      fajr_time: string;
+      dhuhr_time: string;
+      asr_time: string;
+      maghrib_time: string;
+      isha_time: string;
+      jumua_time: string;
+    }>;
     const updated = await fastify.prisma.mosque.update({
       where: { mosque_id: request.tenant.mosque_id },
       data: {
@@ -93,10 +128,62 @@ export default async function mosqueRoutes(fastify: FastifyInstance) {
         brand_color: body.brand_color,
         logo_url: body.logo_url,
         notification_email: body.notification_email,
-        notification_in_app: body.notification_in_app
+        notification_in_app: body.notification_in_app,
+        fajr_time: body.fajr_time,
+        dhuhr_time: body.dhuhr_time,
+        asr_time: body.asr_time,
+        maghrib_time: body.maghrib_time,
+        isha_time: body.isha_time,
+        jumua_time: body.jumua_time
       }
     });
-    await fastify.audit(request, 'tenant.updated', 'Mosque', updated.mosque_id, 'Mosque settings updated.');
+    await fastify.audit(request, 'tenant.updated', 'Mosque', updated.mosque_id, 'Mosque settings and prayer times updated.');
+    reply.send(updated);
+  });
+
+  fastify.patch('/api/admin/mosques/:slug', {
+    schema: updateMosqueSchema,
+    preHandler: [tenantHook, fastify.adminOnly]
+  }, async (request, reply) => {
+    const body = request.body as Partial<{
+      name: string;
+      address: string;
+      phone: string;
+      email: string;
+      timezone: string;
+      brand_color: string;
+      logo_url: string;
+      notification_email: boolean;
+      notification_in_app: boolean;
+      fajr_time: string;
+      dhuhr_time: string;
+      asr_time: string;
+      maghrib_time: string;
+      isha_time: string;
+      jumua_time: string;
+    }>;
+    const updated = await fastify.prisma.mosque.update({
+      where: { mosque_id: request.tenant.mosque_id },
+      data: {
+        name: body.name?.trim(),
+        address: body.address,
+        phone: body.phone,
+        email: body.email?.trim().toLowerCase(),
+        timezone: body.timezone,
+        brand_color: body.brand_color,
+        logo_url: body.logo_url,
+        notification_email: body.notification_email,
+        notification_in_app: body.notification_in_app,
+        fajr_time: body.fajr_time,
+        dhuhr_time: body.dhuhr_time,
+        asr_time: body.asr_time,
+        maghrib_time: body.maghrib_time,
+        isha_time: body.isha_time,
+        jumua_time: body.jumua_time
+      }
+    });
+    await fastify.audit(request, 'tenant.updated', 'Mosque', updated.mosque_id, 'Mosque settings and prayer times updated.');
     reply.send(updated);
   });
 }
+
