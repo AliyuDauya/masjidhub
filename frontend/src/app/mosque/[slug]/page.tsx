@@ -141,9 +141,22 @@ export default function MosquePortal() {
               >
                 MEMBER DASHBOARD
               </Link>
+              <Link
+                href="/forgot-password"
+                className="btn-pill-secondary py-2 px-4 text-[9px] tracking-ultra-wide text-[#0d4734] border border-[#c89b3c]/40 hover:bg-[#e4efe9] flex items-center gap-1"
+              >
+                <span>🔑</span>
+                <span>RESET PASSWORD</span>
+              </Link>
             </div>
           ) : (
             <div className="flex items-center gap-3">
+              <Link
+                href="/forgot-password"
+                className="text-[9px] font-bold uppercase tracking-wider text-[#c89b3c] hover:text-[#0d4734] transition-colors hidden sm:inline"
+              >
+                Forgot Password?
+              </Link>
               <Link
                 href={`/mosque/${slug}/login`}
                 className="btn-pill-secondary py-2.5 px-5 text-[9px] tracking-ultra-wide"

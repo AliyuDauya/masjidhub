@@ -267,6 +267,13 @@ export default function MosqueMemberDashboard() {
           >
             MOSQUE PORTAL
           </Link>
+          <Link
+            href="/forgot-password"
+            className="btn-pill-secondary py-1.5 px-3 text-[9px] tracking-widest text-[#0d4734] border border-[#c89b3c]/40 hover:bg-[#e4efe9] flex items-center gap-1"
+          >
+            <span>🔑</span>
+            <span>RESET PASSWORD</span>
+          </Link>
           <button
             onClick={() => {
               clearToken(slug);
@@ -357,6 +364,12 @@ export default function MosqueMemberDashboard() {
                   className="btn-pill-secondary py-3 px-6 text-[9px] tracking-ultra-wide bg-white/10 text-white hover:bg-white hover:text-[#0d4734] whitespace-nowrap"
                 >
                   EXPLORE CLASSES
+                </Link>
+                <Link
+                  href="/forgot-password"
+                  className="btn-pill-secondary py-3 px-6 text-[9px] tracking-ultra-wide bg-[#c89b3c]/20 text-[#c89b3c] hover:bg-[#c89b3c] hover:text-[#0d4734] whitespace-nowrap border border-[#c89b3c]"
+                >
+                  🔑 RESET PASSWORD
                 </Link>
               </div>
             </div>

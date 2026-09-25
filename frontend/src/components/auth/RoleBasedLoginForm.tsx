@@ -534,6 +534,15 @@ export default function RoleBasedLoginForm({
                 className="w-full bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[8px] py-2.5 px-3 text-xs font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734] transition-colors"
                 required
               />
+              <div className="flex justify-end pt-1">
+                <Link
+                  href="/forgot-password"
+                  className="text-[10px] font-black uppercase tracking-wider text-[#c89b3c] hover:text-[#0d4734] transition-colors flex items-center gap-1"
+                >
+                  <span>🔑</span>
+                  <span>Forgot Password? Reset Here &rarr;</span>
+                </Link>
+              </div>
             </div>
 
             {/* Submit CTA Button */}
