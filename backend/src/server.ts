@@ -95,6 +95,28 @@ export function buildServer() {
   server.register(securityPlugin);
   server.register(authPlugin);
 
+  // Health Check Endpoint per Developer Guide §12.3
+  server.get('/health', async (request, reply) => {
+    try {
+      // Ping SQLite / DB connection
+      await server.prisma.$queryRaw`SELECT 1`;
+      return reply.status(200).send({
+        status: 'ok',
+        uptime: process.uptime(),
+        db: 'connected',
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      return reply.status(503).send({
+        status: 'error',
+        uptime: process.uptime(),
+        db: 'disconnected',
+        error: 'Database connectivity check failed',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Register Domain Routes
   server.register(mosqueRoutes);
   server.register(authRoutes);

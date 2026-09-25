@@ -75,6 +75,29 @@ Tenant roles are:
 
 New public accounts always receive the member role. Privileged roles can only be assigned by a tenant administrator. New mosque applications remain pending until activated through the platform console.
 
+## Health Monitoring & Health Checks
+
+The backend provides a `/health` endpoint returning server uptime and live database connectivity status:
+
+```bash
+curl http://localhost:5000/health
+# Response: {"status":"ok","uptime":142.5,"db":"connected","timestamp":"2026-09-25T11:55:00.000Z"}
+```
+
+## Database Backup & Recovery (SQLite)
+
+Per Developer Guide §12.4, use online SQLite vacuum/backup to avoid database locking during operation:
+
+```bash
+# 1. Hot Backup without service interruption
+sqlite3 backend/prisma/masjidhub.db ".backup 'backend/prisma/masjidhub_backup_$(date +%Y%m%d%H%M%S).db'"
+
+# 2. Disaster Recovery / Restore Procedure
+# Stop the backend service before replacing the database file
+cp backend/prisma/masjidhub_backup_TARGET.db backend/prisma/masjidhub.db
+npm --prefix backend run db:migrate
+```
+
 ## Verification
 
 ```bash
@@ -84,4 +107,5 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-The online donation endpoint is a prototype record-and-receipt flow. It does not process or hold real funds.
+The online donation endpoint is a prototype record-and-receipt flow with Paystack integration and cryptographic PDF receipt generation. It does not hold custody of real funds.
+

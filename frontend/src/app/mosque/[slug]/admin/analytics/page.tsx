@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import BackButton from '@/components/BackButton';
 
 interface DonationMetrics {
   totalDonationsCount: number;
@@ -26,8 +27,13 @@ export default function AdminAnalytics() {
   const [donations, setDonations] = useState<DonationMetrics | null>(null);
   const [programs, setPrograms] = useState<ProgramMetric[]>([]);
   const [error, setError] = useState('');
+  const [isPlatformOperator, setIsPlatformOperator] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('masjidhub:platform:token')) {
+      setIsPlatformOperator(true);
+    }
+
     Promise.all([
       api<DonationMetrics>(slug, '/api/admin/analytics/donations'),
       api<ProgramMetric[]>(slug, '/api/admin/analytics/registrations'),
@@ -41,9 +47,31 @@ export default function AdminAnalytics() {
 
   return (
     <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
+      {/* Super Admin Persistent Inspection Mode Top Banner */}
+      {isPlatformOperator && (
+        <div className="bg-[#0d4734] border-b-2 border-[#c89b3c] text-white px-6 md:px-12 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs sticky top-0 z-50 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#c89b3c] animate-pulse" />
+            <span className="font-black uppercase tracking-wider text-[#c89b3c]">
+              🛡️ SUPER ADMIN ROOT SESSION ACTIVE
+            </span>
+            <span className="text-[#e4efe9]/80 hidden md:inline">
+              — Currently reviewing <strong>/{slug}</strong> analytics
+            </span>
+          </div>
+          <Link
+            href="/platform"
+            className="btn-pill-gold py-1 px-4 text-[9px] tracking-widest whitespace-nowrap shadow-xs"
+          >
+            RETURN TO PLATFORM CONSOLE &rarr;
+          </Link>
+        </div>
+      )}
+
       {/* 80px Glassmorphism Navigation Header */}
-      <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
+      <header className={`nav-glass px-8 md:px-12 flex items-center justify-between sticky ${isPlatformOperator ? 'top-[42px]' : 'top-0'} z-40`}>
         <div className="flex items-center gap-3">
+          <BackButton fallbackUrl={`/mosque/${slug}/admin`} />
           <Link href="/" className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
             <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
             <span>MASJIDHUB</span>
@@ -54,12 +82,22 @@ export default function AdminAnalytics() {
           </span>
         </div>
 
-        <Link
-          href={`/mosque/${slug}/admin`}
-          className="btn-pill-secondary py-2 px-5 text-[9px] tracking-ultra-wide"
-        >
-          &larr; BACK TO WORKSPACE
-        </Link>
+        <div className="flex items-center gap-3">
+          {isPlatformOperator && (
+            <Link
+              href="/platform"
+              className="btn-pill-gold py-1.5 px-3.5 text-[9px] tracking-widest hidden sm:inline-flex"
+            >
+              🛡️ CONSOLE
+            </Link>
+          )}
+          <Link
+            href={`/mosque/${slug}/admin`}
+            className="btn-pill-secondary py-2 px-5 text-[9px] tracking-ultra-wide"
+          >
+            WORKSPACE &rarr;
+          </Link>
+        </div>
       </header>
 
       {/* Main Content */}

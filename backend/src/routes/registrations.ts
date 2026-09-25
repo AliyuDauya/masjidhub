@@ -22,7 +22,7 @@ export default async function registrationRoutes(fastify: FastifyInstance) {
         const program = await tx.program.findFirst({ where: { program_id: programId, mosque_id: request.tenant.mosque_id, status: 'Published' } });
         if (!program) throw new Error('PROGRAM_NOT_FOUND');
         const existing = await tx.registration.findUnique({ where: { mosque_id_user_id_program_id: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id, program_id: programId } } });
-        if (existing?.status !== 'Cancelled') throw new Error('ALREADY_REGISTERED');
+        if (existing && existing.status !== 'Cancelled') throw new Error('ALREADY_REGISTERED');
         if (program.max_capacity > 0) {
           const occupied = await tx.registration.count({ where: { mosque_id: request.tenant.mosque_id, program_id: programId, status: 'Registered' } });
           if (occupied >= program.max_capacity) throw new Error('CAPACITY_FULL');
@@ -58,7 +58,31 @@ export default async function registrationRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.requireMembership()]
   }, async (request, reply) => {
     const payload = request.user as JWTPayload;
-    reply.send(await fastify.prisma.registration.findMany({ where: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id }, include: { program: true }, orderBy: { reg_date: 'desc' } }));
+    const query = (request.query || {}) as { current_only?: string };
+    const whereClause = query.current_only === 'true'
+      ? { mosque_id: request.tenant.mosque_id, user_id: payload.user_id }
+      : { user_id: payload.user_id };
+
+    reply.send(await fastify.prisma.registration.findMany({
+      where: whereClause,
+      include: {
+        mosque: {
+          select: { mosque_id: true, name: true, slug: true }
+        },
+        program: {
+          include: {
+            _count: {
+              select: {
+                registrations: {
+                  where: { status: 'Registered' }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { reg_date: 'desc' }
+    }));
   });
 
   fastify.get('/api/admin/programs/:id/registrations', {

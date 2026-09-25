@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import RoleBasedLoginForm, { MosqueOption } from '@/components/auth/RoleBasedLoginForm';
 import { api } from '@/lib/api';
+import BackButton from '@/components/BackButton';
 
 export default function MosqueLoginPage() {
   const params = useParams();
@@ -27,6 +28,7 @@ export default function MosqueLoginPage() {
       {/* 80px Glassmorphism Header */}
       <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
+          <BackButton fallbackUrl={`/mosque/${slug}`} />
           <Link
             href={`/mosque/${slug}`}
             className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3"
@@ -43,7 +45,7 @@ export default function MosqueLoginPage() {
           href={`/mosque/${slug}`}
           className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734] hover:text-[#c89b3c] transition-colors"
         >
-          &larr; BACK TO MOSQUE
+          MOSQUE PORTAL &rarr;
         </Link>
       </header>
 

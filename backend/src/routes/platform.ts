@@ -89,12 +89,51 @@ export default async function platformRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/api/platform/metrics', { preHandler: [fastify.platformOnly] }, async (_request, reply) => {
-    const [tenants, users, memberships, auditEvents] = await Promise.all([
+    const [tenants, users, memberships, auditEvents, donations, programs] = await Promise.all([
       fastify.prisma.mosque.groupBy({ by: ['status'], _count: true }),
       fastify.prisma.user.count(),
       fastify.prisma.membership.count(),
-      fastify.prisma.auditEvent.count()
+      fastify.prisma.auditEvent.count(),
+      fastify.prisma.donation.count(),
+      fastify.prisma.program.count()
     ]);
-    reply.send({ tenants, users, memberships, auditEvents });
+    reply.send({ tenants, users, memberships, auditEvents, donations, programs });
+  });
+
+  fastify.get('/api/platform/audit-events', { preHandler: [fastify.platformOnly] }, async (_request, reply) => {
+    const events = await fastify.prisma.auditEvent.findMany({
+      include: {
+        actor: { select: { name: true, email: true } },
+        mosque: { select: { name: true, slug: true } }
+      },
+      orderBy: { created_at: 'desc' },
+      take: 150
+    });
+    reply.send(events);
+  });
+
+  fastify.get('/api/platform/users', { preHandler: [fastify.platformOnly] }, async (_request, reply) => {
+    const users = await fastify.prisma.user.findMany({
+      select: {
+        user_id: true,
+        name: true,
+        email: true,
+        phone: true,
+        platform_role: true,
+        account_status: true,
+        created_at: true,
+        memberships: {
+          select: {
+            membership_id: true,
+            role: true,
+            status: true,
+            mosque: { select: { name: true, slug: true } }
+          }
+        }
+      },
+      orderBy: { created_at: 'desc' },
+      take: 200
+    });
+    reply.send(users);
   });
 }

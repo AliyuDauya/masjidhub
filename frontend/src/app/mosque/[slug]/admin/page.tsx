@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api, clearToken } from '@/lib/api';
 import NotificationCenter from '@/components/NotificationCenter';
+import BackButton from '@/components/BackButton';
 
 export type Tab = 'overview' | 'prayers' | 'announcements' | 'programs' | 'donations' | 'members' | 'audit' | 'settings';
 export type TenantRole = 'tenant_admin' | 'finance_officer' | 'programme_officer' | 'communications_officer' | 'member';
@@ -143,7 +144,7 @@ export default function MosqueAdmin() {
   const [currentRole, setCurrentRole] = useState<TenantRole>('tenant_admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
   const [authStatus, setAuthStatus] = useState<'checking' | 'unauthenticated' | 'forbidden' | 'authorized'>('checking');
-
+  const [isPlatformOperator, setIsPlatformOperator] = useState(false);
 
   const [mosque, setMosque] = useState<Mosque | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -212,6 +213,9 @@ export default function MosqueAdmin() {
         const me = await api<UserMe>(slug, '/api/auth/me');
         if (me && me.user_id) {
           setCurrentUser({ name: me.name, email: me.email });
+          if (me.platform_role === 'super_admin') {
+            setIsPlatformOperator(true);
+          }
           const tenantMembership = me.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
           if (tenantMembership) {
             userRole = tenantMembership.role;
@@ -219,6 +223,10 @@ export default function MosqueAdmin() {
         }
       } catch {
         // Fallback default
+      }
+
+      if (typeof window !== 'undefined' && localStorage.getItem('masjidhub:platform:token')) {
+        setIsPlatformOperator(true);
       }
 
       if (userRole === 'member') {
@@ -299,15 +307,28 @@ export default function MosqueAdmin() {
   async function inviteMember(e: FormEvent) {
     e.preventDefault();
     try {
-      await api(slug, '/api/admin/memberships', {
+      await api(slug, '/api/admin/memberships/invite', {
         method: 'POST',
         body: JSON.stringify(invite)
       });
       setInvite({ name: '', email: '', role: 'member', temporary_password: '' });
-      done('Person added and role assigned.');
+      done('Person added and permissions assigned successfully.');
       load();
     } catch (x) {
-      setError(x instanceof Error ? x.message : 'Could not add person.');
+      setError(x instanceof Error ? x.message : 'Could not assign permissions.');
+    }
+  }
+
+  async function updateMemberRole(membershipId: number, newRole: string, newStatus?: string) {
+    try {
+      await api(slug, `/api/admin/memberships/${membershipId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: newRole, status: newStatus })
+      });
+      done('Member role and permissions updated successfully.');
+      load();
+    } catch (x) {
+      setError(x instanceof Error ? x.message : 'Failed to update member role.');
     }
   }
 
@@ -563,9 +584,31 @@ export default function MosqueAdmin() {
 
   return (
     <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
+      {/* Super Admin Persistent Inspection Mode Top Banner */}
+      {isPlatformOperator && (
+        <div className="bg-[#0d4734] border-b-2 border-[#c89b3c] text-white px-6 md:px-12 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs sticky top-0 z-50 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#c89b3c] animate-pulse" />
+            <span className="font-black uppercase tracking-wider text-[#c89b3c]">
+              🛡️ SUPER ADMIN ROOT SESSION ACTIVE
+            </span>
+            <span className="text-[#e4efe9]/80 hidden md:inline">
+              — Currently inspecting <strong>{mosque?.name || slug}</strong> tenant workspace
+            </span>
+          </div>
+          <Link
+            href="/platform"
+            className="btn-pill-gold py-1 px-4 text-[9px] tracking-widest whitespace-nowrap shadow-xs"
+          >
+            RETURN TO PLATFORM CONSOLE &rarr;
+          </Link>
+        </div>
+      )}
+
       {/* 80px Glassmorphism Navigation Header */}
-      <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
+      <header className={`nav-glass px-8 md:px-12 flex items-center justify-between sticky ${isPlatformOperator ? 'top-[42px]' : 'top-0'} z-40`}>
         <div className="flex items-center gap-3">
+          <BackButton fallbackUrl={`/mosque/${slug}`} />
           <Link href={`/mosque/${slug}`} className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
             <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
             <span>MASJIDHUB</span>
@@ -581,6 +624,14 @@ export default function MosqueAdmin() {
 
         <div className="flex items-center gap-3">
           <NotificationCenter slug={slug} />
+          {isPlatformOperator && (
+            <Link
+              href="/platform"
+              className="btn-pill-gold py-1.5 px-3.5 text-[9px] tracking-widest hidden sm:inline-flex"
+            >
+              🛡️ CONSOLE
+            </Link>
+          )}
           <Link
             href={`/mosque/${slug}/admin/analytics`}
             className="btn-pill-secondary py-2 px-4 text-[9px] tracking-ultra-wide hidden sm:inline-flex"
@@ -688,6 +739,190 @@ export default function MosqueAdmin() {
                   </span>
                   <p className="text-3xl font-black text-[#0d4734]">{members.length}</p>
                   <p className="text-[10px] font-mono text-[#1c2421]/50 mt-1 uppercase">Congregation worshippers</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PRAYER TIMETABLE */}
+          {tab === 'prayers' && mosque && (
+            <div className="space-y-6">
+              <form onSubmit={saveSettings} className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#c89b3c]/20 pb-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                      CONGREGATIONAL IQAMAH SCHEDULE
+                    </span>
+                    <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#0d4734]">
+                      Daily Prayer & Jumu&apos;ah Timetable
+                    </h2>
+                    <p className="text-xs text-[#1c2421]/70 mt-1 font-normal">
+                      Configure and update Iqamah congregational timings. Changes automatically sync to your public portal and congregant passes.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTitle(`Prayer Timetable Update (${new Date().toLocaleDateString()})`);
+                        setContent(`Updated Iqamah Timings at ${mosque.name}:\n• Fajr: ${mosque.fajr_time || '05:15 AM'}\n• Dhuhr: ${mosque.dhuhr_time || '01:00 PM'}\n• Asr: ${mosque.asr_time || '04:30 PM'}\n• Maghrib: ${mosque.maghrib_time || '07:15 PM'}\n• Isha: ${mosque.isha_time || '08:30 PM'}\n• Jumu'ah: ${mosque.jumua_time || '01:30 PM'}`);
+                        setCategory('Prayer');
+                        setTab('announcements');
+                      }}
+                      className="btn-pill-secondary py-2.5 px-4 text-[9px] tracking-widest whitespace-nowrap"
+                    >
+                      📢 BROADCAST AS NOTICE
+                    </button>
+                    <button type="submit" className="btn-pill-cta py-2.5 px-6 text-[9px] tracking-widest whitespace-nowrap">
+                      SAVE TIMETABLE →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Fajr */}
+                  <div className="p-5 rounded-[12px] bg-[#f6f3eb] border border-[#c89b3c]/25 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        🌅 Fajr Iqamah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">Dawn Prayer</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-sm font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.fajr_time || '05:15 AM'}
+                      onChange={(e) => setMosque({ ...mosque, fajr_time: e.target.value })}
+                      placeholder="05:15 AM"
+                    />
+                  </div>
+
+                  {/* Dhuhr */}
+                  <div className="p-5 rounded-[12px] bg-[#f6f3eb] border border-[#c89b3c]/25 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        ☀️ Dhuhr Iqamah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">Noon Prayer</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-sm font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.dhuhr_time || '01:00 PM'}
+                      onChange={(e) => setMosque({ ...mosque, dhuhr_time: e.target.value })}
+                      placeholder="01:00 PM"
+                    />
+                  </div>
+
+                  {/* Asr */}
+                  <div className="p-5 rounded-[12px] bg-[#f6f3eb] border border-[#c89b3c]/25 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        🌤️ Asr Iqamah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">Afternoon Prayer</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-sm font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.asr_time || '04:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, asr_time: e.target.value })}
+                      placeholder="04:30 PM"
+                    />
+                  </div>
+
+                  {/* Maghrib */}
+                  <div className="p-5 rounded-[12px] bg-[#f6f3eb] border border-[#c89b3c]/25 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        🌇 Maghrib Iqamah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">Sunset Prayer</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-sm font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.maghrib_time || '07:15 PM'}
+                      onChange={(e) => setMosque({ ...mosque, maghrib_time: e.target.value })}
+                      placeholder="07:15 PM"
+                    />
+                  </div>
+
+                  {/* Isha */}
+                  <div className="p-5 rounded-[12px] bg-[#f6f3eb] border border-[#c89b3c]/25 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        🌙 Isha Iqamah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">Night Prayer</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#c89b3c]/30 rounded-[6px] py-2 px-3 text-sm font-bold text-[#1c2421] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.isha_time || '08:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, isha_time: e.target.value })}
+                      placeholder="08:30 PM"
+                    />
+                  </div>
+
+                  {/* Jumu'ah */}
+                  <div className="p-5 rounded-[12px] bg-[#e4efe9] border-2 border-[#0d4734]/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#0d4734]">
+                        🕌 Jumu&apos;ah Khutbah
+                      </span>
+                      <span className="text-[9px] font-mono text-[#0d4734] font-bold uppercase">Friday Gathering</span>
+                    </div>
+                    <input
+                      className="w-full bg-white border border-[#0d4734]/40 rounded-[6px] py-2 px-3 text-sm font-bold text-[#0d4734] focus:outline-none focus:border-[#0d4734]"
+                      value={mosque.jumua_time || '01:30 PM'}
+                      onChange={(e) => setMosque({ ...mosque, jumua_time: e.target.value })}
+                      placeholder="01:30 PM"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end">
+                  <button type="submit" className="btn-pill-cta py-3 px-8 text-[10px] tracking-ultra-wide">
+                    SAVE & PUBLISH TIMETABLE →
+                  </button>
+                </div>
+              </form>
+
+              {/* Live Preview Widget of Public Portal */}
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-[#c89b3c]/20 pb-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block">
+                      PUBLIC PORTAL PREVIEW
+                    </span>
+                    <h3 className="text-xl font-black uppercase tracking-tight text-[#0d4734]">
+                      Worshipper Timetable Display
+                    </h3>
+                  </div>
+                  <Link
+                    href={`/mosque/${slug}`}
+                    target="_blank"
+                    className="text-[9px] font-black uppercase tracking-widest text-[#0d4734] hover:text-[#c89b3c]"
+                  >
+                    OPEN PUBLIC HOMEPAGE ↗
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    { name: 'Fajr', time: mosque.fajr_time || '05:15 AM' },
+                    { name: 'Dhuhr', time: mosque.dhuhr_time || '01:00 PM' },
+                    { name: 'Asr', time: mosque.asr_time || '04:30 PM' },
+                    { name: 'Maghrib', time: mosque.maghrib_time || '07:15 PM' },
+                    { name: 'Isha', time: mosque.isha_time || '08:30 PM' },
+                    { name: "Jumu'ah", time: mosque.jumua_time || '01:30 PM' }
+                  ].map((p) => (
+                    <div
+                      key={p.name}
+                      className="p-4 rounded-[10px] bg-[#fcfbfa] border border-[#c89b3c]/30 text-center space-y-1 shadow-xs"
+                    >
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[#c89b3c] block">
+                        {p.name}
+                      </span>
+                      <p className="text-lg font-black text-[#0d4734] font-mono">{p.time}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1349,21 +1584,91 @@ export default function MosqueAdmin() {
                 </button>
               </form>
 
-              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs">
-                <h2 className="text-xl font-black uppercase tracking-tight text-[#0d4734] mb-4">
-                  Active Mosque Roster
-                </h2>
-                {members.map((m) => (
-                  <div key={m.membership_id} className="flex justify-between items-center py-3.5 border-b border-[#c89b3c]/15 text-xs">
-                    <div>
-                      <strong className="font-bold text-[#0d4734]">{m.user?.name || 'Member'}</strong>
-                      <small className="block font-mono text-[10px] text-[#1c2421]/50">{m.user?.email}</small>
-                    </div>
-                    <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-[#f6f3eb] text-[#0d4734] border border-[#c89b3c]/20">
-                      {m.role.replaceAll('_', ' ')} · {m.status}
+              <div className="bg-white p-8 rounded-[16px] border-2 border-[#c89b3c]/25 shadow-xs space-y-4">
+                <div className="flex justify-between items-center border-b border-[#c89b3c]/20 pb-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">
+                      CONGREGATION PERMISSIONS
                     </span>
+                    <h2 className="text-xl font-black uppercase tracking-tight text-[#0d4734]">
+                      Active Mosque Roster ({members.length})
+                    </h2>
                   </div>
-                ))}
+                  <span className="text-[9px] font-mono text-[#1c2421]/50 uppercase">
+                    Role-Based Access Control
+                  </span>
+                </div>
+
+                <div className="divide-y divide-[#c89b3c]/15">
+                  {members.map((m) => (
+                    <div
+                      key={m.membership_id}
+                      className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <strong className="font-bold text-sm text-[#0d4734] truncate">
+                            {m.user?.name || 'Member'}
+                          </strong>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                              m.status === 'Active'
+                                ? 'bg-[#e4efe9] text-[#0d4734]'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {m.status}
+                          </span>
+                        </div>
+                        <small className="block font-mono text-[10px] text-[#1c2421]/60">
+                          {m.user?.email}
+                        </small>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-[#1c2421]/50 hidden sm:inline">
+                            Role:
+                          </label>
+                          <select
+                            className="bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-1.5 px-3 text-xs font-bold uppercase text-[#0d4734] focus:outline-none focus:border-[#0d4734] cursor-pointer"
+                            value={m.role}
+                            onChange={(e) => updateMemberRole(m.membership_id, e.target.value, m.status)}
+                          >
+                            <option value="member">Member</option>
+                            <option value="finance_officer">Finance Officer</option>
+                            <option value="programme_officer">Programme Officer</option>
+                            <option value="communications_officer">Communications Officer</option>
+                            <option value="tenant_admin">Tenant Administrator</option>
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateMemberRole(
+                              m.membership_id,
+                              m.role,
+                              m.status === 'Active' ? 'Suspended' : 'Active'
+                            )
+                          }
+                          className={`py-1 px-3 rounded-[6px] text-[8px] font-black uppercase tracking-widest transition-all ${
+                            m.status === 'Active'
+                              ? 'bg-[#f6f3eb] text-red-700 hover:bg-red-50 border border-red-200'
+                              : 'bg-[#e4efe9] text-[#0d4734] hover:bg-[#d5e7dd] border border-[#0d4734]/20'
+                          }`}
+                        >
+                          {m.status === 'Active' ? 'SUSPEND' : 'ACTIVATE'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {members.length === 0 && (
+                    <p className="py-8 text-center text-xs font-mono uppercase text-[#1c2421]/50">
+                      No members registered in this mosque yet.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}

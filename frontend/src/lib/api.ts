@@ -12,7 +12,17 @@ export function tokenKey(slug: string) {
 }
 
 export function getToken(slug: string) {
-  return typeof window === 'undefined' ? null : localStorage.getItem(tokenKey(slug));
+  if (typeof window === 'undefined') return null;
+  const specific = localStorage.getItem(tokenKey(slug));
+  if (specific) return specific;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('masjidhub:') && key.endsWith(':token') && !key.includes('platform')) {
+      const val = localStorage.getItem(key);
+      if (val) return val;
+    }
+  }
+  return null;
 }
 
 export function setToken(slug: string, token: string) {

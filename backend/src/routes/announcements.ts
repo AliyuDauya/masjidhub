@@ -30,16 +30,38 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
   // GET /api/announcements - Fetch active and non-expired announcements for tenant
   fastify.get('/api/announcements', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const now = new Date();
+      const now = new Date(Date.now() + 60000); // 1-min buffer for immediate visibility
+      let isMemberOrStaff = false;
+
+      try {
+        let token: string | undefined = request.cookies?.mh_session;
+        if (!token && request.headers.authorization) {
+          const parts = request.headers.authorization.split(' ');
+          if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+            token = parts[1];
+          }
+        }
+        if (token) {
+          const payload = fastify.jwt.verify<JWTPayload>(token);
+          if (payload?.user_id) {
+            isMemberOrStaff = true;
+          }
+        }
+      } catch {
+        // Unauthenticated -> Public only
+      }
+
+      const allowedAudiences = isMemberOrStaff ? ['Public', 'Members', 'Staff'] : ['Public'];
+
       const announcements = await fastify.prisma.announcement.findMany({
         where: {
           mosque_id: request.tenant.mosque_id,
           status: 'Published',
-          audience: 'Public',
+          audience: { in: allowedAudiences },
           publish_at: { lte: now },
           OR: [
             { expiry_date: null },
-            { expiry_date: { gt: now } }
+            { expiry_date: { gt: new Date() } }
           ]
         },
         orderBy: { posted_at: 'desc' }
@@ -84,6 +106,35 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
           publish_at: publish_at ? new Date(publish_at) : new Date()
         }
       });
+
+      // Auto-dispatch in-app notification to all members of this mosque
+      if (status === 'Published') {
+        try {
+          const memberships = await fastify.prisma.membership.findMany({
+            where: { mosque_id: request.tenant.mosque_id },
+            select: { user_id: true }
+          });
+
+          if (memberships.length > 0) {
+            const shortSnippet = content.length > 90 ? `${content.slice(0, 90)}...` : content;
+            await fastify.prisma.notification.createMany({
+              data: memberships.map((m) => ({
+                mosque_id: request.tenant.mosque_id,
+                user_id: m.user_id,
+                message: `📢 [${category}] ${title}: ${shortSnippet}`,
+                type: 'Announcement',
+                status: 'Sent',
+                sent_at: new Date(),
+                related_type: 'Announcement',
+                related_id: announcement.announcement_id
+              }))
+            });
+          }
+        } catch (notifErr) {
+          fastify.log.warn({ notifErr }, 'Failed to dispatch notification records for announcement');
+        }
+      }
+
       await fastify.audit(request, 'announcement.created', 'Announcement', announcement.announcement_id, `Announcement ${status.toLowerCase()}.`);
       reply.status(201).send(announcement);
     } catch (err) {

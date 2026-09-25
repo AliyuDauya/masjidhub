@@ -509,13 +509,21 @@ export default function RoleBasedLoginForm({
                 >
                   Password / Security Key *
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="text-[9px] font-bold uppercase text-[#c89b3c] hover:text-[#0d4734] transition-colors"
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/forgot-password"
+                    className="text-[9px] font-bold uppercase text-[#c89b3c] hover:text-[#0d4734] transition-colors"
+                  >
+                    Forgot Password?
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[9px] font-bold uppercase text-[#1c2421]/60 hover:text-[#0d4734] transition-colors"
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
               <input
                 id="auth-password"
@@ -562,6 +570,18 @@ export default function RoleBasedLoginForm({
               {activeRole === 'member'
                 ? 'CREATE ACCOUNT →'
                 : 'ONBOARD MOSQUE →'}
+            </Link>
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-[#c89b3c]/10 text-xs">
+            <span className="text-[#1c2421]/60 font-normal">
+              Trouble logging in or forgotten password?
+            </span>
+            <Link
+              href="/forgot-password"
+              className="text-[9px] font-black uppercase tracking-wider text-[#c89b3c] hover:text-[#0d4734] transition-colors"
+            >
+              Reset Credentials &rarr;
             </Link>
           </div>
 

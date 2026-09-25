@@ -3,7 +3,13 @@ import bcrypt from 'bcryptjs';
 import { tenantHook } from '../middleware/tenantHook.js';
 import type { JWTPayload } from '../plugins/auth.js';
 import { setAuthCookies, clearAuthCookies, createCsrfToken } from '../plugins/security.js';
-import { registerSchema, loginSchema, switchTenantSchema } from '../schemas/index.js';
+import {
+  registerSchema,
+  loginSchema,
+  switchTenantSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema
+} from '../schemas/index.js';
 
 interface RegisterBody {
   name: string;
@@ -350,5 +356,98 @@ export default async function authRoutes(fastify: FastifyInstance) {
     setAuthCookies(reply, token, csrfToken);
 
     reply.send({ token, csrfToken, mosque, role: membership.role });
+  });
+
+  // POST /api/auth/forgot-password - Request password reset link / token
+  fastify.post('/api/auth/forgot-password', {
+    schema: forgotPasswordSchema
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { email } = request.body as { email: string };
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await fastify.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) {
+      // Privacy-preserving response
+      reply.send({
+        success: true,
+        message: 'If an account exists with this email address, password reset instructions have been generated.'
+      });
+      return;
+    }
+
+    // Generate a secure reset token valid for 1 hour
+    const resetToken = fastify.jwt.sign(
+      {
+        user_id: user.user_id,
+        email: user.email,
+        type: 'pwd_reset'
+      },
+      { expiresIn: '1h' }
+    );
+
+    await fastify.audit(
+      request,
+      'user.password_reset_requested',
+      'User',
+      user.user_id,
+      `Password reset token generated for ${user.email}.`
+    );
+
+    reply.send({
+      success: true,
+      message: 'Password reset link has been generated.',
+      resetToken,
+      resetUrl: `/reset-password?token=${resetToken}`
+    });
+  });
+
+  // POST /api/auth/reset-password - Complete password reset with new password
+  fastify.post('/api/auth/reset-password', {
+    schema: resetPasswordSchema
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { resetToken, newPassword } = request.body as { resetToken: string; newPassword: string };
+
+    if (!newPassword || newPassword.length < 8) {
+      reply.status(400).send({ error: 'Password must contain at least 8 characters.' });
+      return;
+    }
+
+    let payload: { user_id: number; email: string; type: string };
+    try {
+      payload = fastify.jwt.verify<{ user_id: number; email: string; type: string }>(resetToken);
+    } catch {
+      reply.status(400).send({ error: 'Invalid or expired password reset token. Please request a new one.' });
+      return;
+    }
+
+    if (payload.type !== 'pwd_reset' || !payload.user_id) {
+      reply.status(400).send({ error: 'Invalid password reset token format.' });
+      return;
+    }
+
+    const user = await fastify.prisma.user.findUnique({ where: { user_id: payload.user_id } });
+    if (!user) {
+      reply.status(404).send({ error: 'User account not found.' });
+      return;
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    await fastify.prisma.user.update({
+      where: { user_id: user.user_id },
+      data: { password_hash: newPasswordHash }
+    });
+
+    await fastify.audit(
+      request,
+      'user.password_reset_completed',
+      'User',
+      user.user_id,
+      `Password successfully reset for ${user.email}.`
+    );
+
+    reply.send({
+      success: true,
+      message: 'Your password has been successfully updated. You may now sign in with your new credentials.'
+    });
   });
 }

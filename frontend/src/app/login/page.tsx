@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import RoleBasedLoginForm from '@/components/auth/RoleBasedLoginForm';
+import BackButton from '@/components/BackButton';
 
 export default function GlobalLoginPage() {
   return (
@@ -10,6 +11,7 @@ export default function GlobalLoginPage() {
       {/* 80px Glassmorphism Header */}
       <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
+          <BackButton fallbackUrl="/" />
           <Link href="/" className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
             <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
             <span>MASJIDHUB</span>
@@ -23,7 +25,7 @@ export default function GlobalLoginPage() {
           href="/"
           className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734] hover:text-[#c89b3c] transition-colors"
         >
-          &larr; HOME
+          HOME &rarr;
         </Link>
       </header>
 

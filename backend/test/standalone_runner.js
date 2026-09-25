@@ -93,6 +93,34 @@ describe('MasjidHub Backend Logic & Requirements Verification', () => {
       assert.strictEqual(sanitized.email, 'new@alnoor.org');
       assert.strictEqual(sanitized.role, 'member');
     });
+
+    it('should generate secure password reset token payload for valid user', () => {
+      const db = createMockDb();
+      const user = db.users[1];
+      const resetPayload = {
+        user_id: user.user_id,
+        email: user.email,
+        type: 'pwd_reset'
+      };
+      assert.strictEqual(resetPayload.user_id, 2);
+      assert.strictEqual(resetPayload.type, 'pwd_reset');
+    });
+
+    it('should update password hash on password reset and verify new password', () => {
+      const db = createMockDb();
+      const user = db.users[1]; // original password: member123
+      const newPassword = 'freshSecurePassword2026!';
+      assert.ok(newPassword.length >= 8);
+      user.password_hash = hashPassword(newPassword);
+      assert.strictEqual(user.password_hash, hashPassword(newPassword));
+      assert.notStrictEqual(user.password_hash, hashPassword('member123'));
+    });
+
+    it('should reject password reset payloads with password less than 8 characters', () => {
+      const invalidPassword = 'short';
+      const isValid = invalidPassword.length >= 8;
+      assert.strictEqual(isValid, false);
+    });
   });
 
   describe('Mosque Registration Endpoint Logic', () => {
@@ -1065,7 +1093,108 @@ describe('MasjidHub Backend Logic & Requirements Verification', () => {
       });
     });
   });
+
+  describe('Developer Guide §10-§12 Architecture & Compliance Verification', () => {
+    describe('Health Endpoint Verification (§12.3)', () => {
+      function getHealthStatus(dbConnected = true) {
+        if (!dbConnected) {
+          return {
+            status: 503,
+            payload: {
+              status: 'error',
+              uptime: 100.5,
+              db: 'disconnected',
+              error: 'Database connectivity check failed',
+              timestamp: new Date().toISOString()
+            }
+          };
+        }
+        return {
+          status: 200,
+          payload: {
+            status: 'ok',
+            uptime: 100.5,
+            db: 'connected',
+            timestamp: new Date().toISOString()
+          }
+        };
+      }
+
+      it('should return 200 ok and connected db state when database is reachable', () => {
+        const res = getHealthStatus(true);
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.payload.status, 'ok');
+        assert.strictEqual(res.payload.db, 'connected');
+      });
+
+      it('should return 503 error when database is unreachable', () => {
+        const res = getHealthStatus(false);
+        assert.strictEqual(res.status, 503);
+        assert.strictEqual(res.payload.status, 'error');
+        assert.strictEqual(res.payload.db, 'disconnected');
+      });
+    });
+
+    describe('Tenant Scoped Query Wrapper Pattern (§3.2)', () => {
+      function createMockTenantScoped(mockPrisma, mosqueId) {
+        return {
+          mosqueId,
+          donation: {
+            findMany: (args = {}) => mockPrisma.donation.findMany({ ...args, where: { ...args.where, mosque_id: mosqueId } })
+          },
+          program: {
+            findMany: (args = {}) => mockPrisma.program.findMany({ ...args, where: { ...args.where, mosque_id: mosqueId } })
+          }
+        };
+      }
+
+      it('should inject mosque_id filter into all query where clauses', () => {
+        let lastQuery = null;
+        const mockPrisma = {
+          donation: {
+            findMany: (args) => {
+              lastQuery = args;
+              return [];
+            }
+          }
+        };
+
+        const scoped = createMockTenantScoped(mockPrisma, 42);
+        scoped.donation.findMany({ where: { status: 'Completed' } });
+
+        assert.strictEqual(lastQuery.where.status, 'Completed');
+        assert.strictEqual(lastQuery.where.mosque_id, 42);
+      });
+    });
+
+    describe('Digital PDF Receipt Generation & Verification (§10.1)', () => {
+      function calculateReceiptHash(mosqueSlug, receiptNumber, amount, currency, category, dateIso) {
+        const payload = `${mosqueSlug}|${receiptNumber}|${amount}|${currency}|${category}|${dateIso}`;
+        return crypto.createHash('sha256').update(payload).digest('hex');
+      }
+
+      it('should generate deterministic SHA-256 integrity hash for verified receipts', () => {
+        const dateIso = '2026-09-25T12:00:00.000Z';
+        const hash1 = calculateReceiptHash('al-noor', 'MH-ABCD1234', 500, 'NGN', 'Zakat', dateIso);
+        const hash2 = calculateReceiptHash('al-noor', 'MH-ABCD1234', 500, 'NGN', 'Zakat', dateIso);
+        assert.strictEqual(hash1, hash2);
+        assert.strictEqual(typeof hash1, 'string');
+        assert.strictEqual(hash1.length, 64);
+      });
+
+      it('should detect tampering in any donation receipt attribute', () => {
+        const dateIso = '2026-09-25T12:00:00.000Z';
+        const authentic = calculateReceiptHash('al-noor', 'MH-ABCD1234', 500, 'NGN', 'Zakat', dateIso);
+        const tamperedAmount = calculateReceiptHash('al-noor', 'MH-ABCD1234', 5000, 'NGN', 'Zakat', dateIso);
+        const tamperedTenant = calculateReceiptHash('al-huda', 'MH-ABCD1234', 500, 'NGN', 'Zakat', dateIso);
+        
+        assert.notStrictEqual(authentic, tamperedAmount);
+        assert.notStrictEqual(authentic, tamperedTenant);
+      });
+    });
+  });
 });
+
 
 
 

@@ -22,11 +22,20 @@ export default async function programRoutes(fastify: FastifyInstance) {
   // Apply tenantHook as a preHandler for all routes in this plugin
   fastify.addHook('preHandler', tenantHook);
 
-  // GET /api/programs - Public endpoint to retrieve scheduled programs for tenant
+  // GET /api/programs - Public endpoint to retrieve scheduled programs for tenant with live attendee count
   fastify.get('/api/programs', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const programs = await fastify.prisma.program.findMany({
         where: { mosque_id: request.tenant.mosque_id, status: 'Published', visibility: 'Public' },
+        include: {
+          _count: {
+            select: {
+              registrations: {
+                where: { status: 'Registered' }
+              }
+            }
+          }
+        },
         orderBy: { start_date: 'asc' }
       });
       reply.send(programs);

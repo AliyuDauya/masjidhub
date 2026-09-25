@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { tenantHook } from '../middleware/tenantHook.js';
 import type { JWTPayload } from '../plugins/auth.js';
+import { generateReceiptPdf } from '../utils/pdfReceipt.js';
 import {
   createDonationSchema,
   manualDonationSchema,
@@ -108,8 +109,18 @@ export default async function donationRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.requireMembership()]
   }, async (request, reply) => {
     const payload = request.user as JWTPayload;
+    const query = (request.query || {}) as { current_only?: string };
+    const whereClause = query.current_only === 'true'
+      ? { mosque_id: request.tenant.mosque_id, user_id: payload.user_id }
+      : { user_id: payload.user_id };
+
     const rows = await fastify.prisma.donation.findMany({
-      where: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id },
+      where: whereClause,
+      include: {
+        mosque: {
+          select: { mosque_id: true, name: true, slug: true }
+        }
+      },
       orderBy: { date: 'desc' }
     });
     reply.send(rows.map(publicDonation));
@@ -145,19 +156,128 @@ export default async function donationRoutes(fastify: FastifyInstance) {
       where: { donation_id: id },
       data: { reconciliation_status: 'Reconciled', verified_by: actor.user_id }
     });
+    
+    // Per Developer Guide §10.1: Write audit event and dispatch notification to worshipper
     await fastify.audit(request, 'donation.reconciled', 'Donation', id, 'Donation reconciled.');
+    if (updated.user_id) {
+      await fastify.prisma.notification.create({
+        data: {
+          mosque_id: request.tenant.mosque_id,
+          user_id: updated.user_id,
+          message: `Your donation of ${updated.currency} ${(updated.amount_minor / 100).toFixed(2)} (${updated.category}) has been verified and reconciled. Receipt: ${updated.receipt_number}`,
+          type: 'DonationVerified',
+          status: 'Sent',
+          related_type: 'Donation',
+          related_id: updated.donation_id,
+          sent_at: new Date()
+        }
+      });
+    }
+
     reply.send(publicDonation(updated));
   });
 
+  // GET /api/donations/:receipt/receipt - Retrieve structured donation receipt details & verification hash
+  fastify.get('/api/donations/:receipt/receipt', async (request, reply) => {
+    const { receipt } = request.params as { receipt: string };
+    const donation = await fastify.prisma.donation.findFirst({
+      where: {
+        receipt_number: receipt,
+        mosque_id: request.tenant.mosque_id
+      },
+      include: {
+        user: { select: { name: true, email: true } }
+      }
+    });
+
+    if (!donation) {
+      return reply.status(404).send({ error: 'Donation receipt not found.' });
+    }
+
+    const hashPayload = `${request.tenant.slug}|${donation.receipt_number}|${donation.amount_minor / 100}|${donation.currency}|${donation.category}|${donation.date.toISOString()}`;
+    const txHash = createHash('sha256').update(hashPayload).digest('hex');
+
+    reply.send({
+      receipt_number: donation.receipt_number,
+      mosque_name: request.tenant.name,
+      mosque_slug: request.tenant.slug,
+      donor_name: donation.user?.name || 'Anonymous Donor',
+      donor_email: donation.user?.email,
+      amount: donation.amount_minor / 100,
+      currency: donation.currency,
+      category: donation.category,
+      method: donation.method,
+      status: donation.status,
+      reconciliation_status: donation.reconciliation_status,
+      date: donation.date,
+      verification_hash: txHash,
+      pdf_url: `/api/donations/${donation.receipt_number}/receipt.pdf`
+    });
+  });
+
+  // GET /api/donations/:receipt/receipt.pdf - Generate digital PDF tax certificate / receipt
+  fastify.get('/api/donations/:receipt/receipt.pdf', async (request, reply) => {
+    const { receipt } = request.params as { receipt: string };
+    const donation = await fastify.prisma.donation.findFirst({
+      where: {
+        receipt_number: receipt,
+        mosque_id: request.tenant.mosque_id
+      },
+      include: {
+        user: { select: { name: true, email: true } }
+      }
+    });
+
+    if (!donation) {
+      return reply.status(404).send({ error: 'Donation receipt not found.' });
+    }
+
+    let verifierEmail: string | undefined;
+    if (donation.verified_by) {
+      const verifier = await fastify.prisma.user.findUnique({ where: { user_id: donation.verified_by } });
+      if (verifier) verifierEmail = verifier.email;
+    }
+
+    const pdfBuffer = generateReceiptPdf({
+      mosqueName: request.tenant.name,
+      mosqueSlug: request.tenant.slug,
+      receiptNumber: donation.receipt_number,
+      donorName: donation.user?.name || 'Anonymous Donor',
+      donorEmail: donation.user?.email,
+      amount: donation.amount_minor / 100,
+      currency: donation.currency,
+      category: donation.category,
+      method: donation.method,
+      date: donation.date,
+      verifiedBy: verifierEmail
+    });
+
+    reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="Receipt-${donation.receipt_number}.pdf"`)
+      .send(pdfBuffer);
+  });
+
+  // GET /api/admin/donations/export.csv - RFC 4180-compliant ledger export per Developer Guide §10.1
   fastify.get('/api/admin/donations/export.csv', {
     preHandler: [fastify.requireMembership(['tenant_admin', 'finance_officer'])]
   }, async (request, reply) => {
     const rows = await fastify.prisma.donation.findMany({
       where: { mosque_id: request.tenant.mosque_id },
+      include: {
+        user: { select: { name: true, email: true } }
+      },
       orderBy: { date: 'desc' }
     });
+
+    const verifierIds = Array.from(new Set(rows.map(r => r.verified_by).filter((id): id is number => typeof id === 'number')));
+    const verifiers = verifierIds.length > 0
+      ? await fastify.prisma.user.findMany({ where: { user_id: { in: verifierIds } }, select: { user_id: true, email: true } })
+      : [];
+    const verifierMap = new Map(verifiers.map(v => [v.user_id, v.email]));
+
     const csv = [
-      'receipt,date,amount,currency,category,method,status,reconciliation',
+      'receipt,date,amount,currency,category,method,status,reconciliation,donor_name,verified_by',
       ...rows.map(d => [
         escapeCsv(d.receipt_number),
         escapeCsv(d.date.toISOString()),
@@ -166,9 +286,12 @@ export default async function donationRoutes(fastify: FastifyInstance) {
         escapeCsv(d.category),
         escapeCsv(d.method),
         escapeCsv(d.status),
-        escapeCsv(d.reconciliation_status)
+        escapeCsv(d.reconciliation_status),
+        escapeCsv(d.user?.name || 'Anonymous Donor'),
+        escapeCsv(d.verified_by ? verifierMap.get(d.verified_by) || String(d.verified_by) : '')
       ].join(','))
     ].join('\n');
+
     await fastify.audit(request, 'donations.exported', 'DonationReport', null, 'Donation report exported.');
     reply.header('Content-Type', 'text/csv').header('Content-Disposition', 'attachment; filename="donations.csv"').send(csv);
   });

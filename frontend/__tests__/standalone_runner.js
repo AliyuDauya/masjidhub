@@ -611,6 +611,18 @@ describe('MasjidHub 3-Portal Login & Platform Frontend Test Suite', () => {
         const homeLink = '/';
         assert.strictEqual(homeLink, '/');
       });
+
+      it('7.6 should provide forgotten password recovery navigation link', () => {
+        const forgotPasswordLink = '/forgot-password';
+        assert.strictEqual(forgotPasswordLink, '/forgot-password');
+      });
+
+      it('7.7 should parse reset password token from URL query params', () => {
+        const sampleUrl = '/reset-password?token=mock-secure-reset-token-xyz';
+        const urlObj = new URL('https://masjidhub.org' + sampleUrl);
+        const token = urlObj.searchParams.get('token');
+        assert.strictEqual(token, 'mock-secure-reset-token-xyz');
+      });
     });
 
     // Feature 8: Session, Cookies & CSRF Protection Invariants

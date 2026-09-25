@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Script from 'next/script';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import BackButton from '@/components/BackButton';
 
 // Helper to reliably load Paystack Inline JS
 function loadPaystackScript(): Promise<boolean> {
@@ -259,12 +260,15 @@ export default function MosqueDonations() {
 
       {/* 80px Glassmorphism Header */}
       <header className="nav-glass px-8 md:px-12 flex items-center justify-between">
-        <Link href={`/mosque/${slug}`} className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
-          <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
-          <span>MASJIDHUB</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <BackButton fallbackUrl={`/mosque/${slug}`} />
+          <Link href={`/mosque/${slug}`} className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
+            <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
+            <span>MASJIDHUB</span>
+          </Link>
+        </div>
         <Link href={`/mosque/${slug}`} className="text-[10px] font-black uppercase tracking-ultra-wide text-[#0d4734] hover:text-[#c89b3c] transition-colors">
-          &larr; RETURN TO PORTAL
+          MOSQUE PORTAL &rarr;
         </Link>
       </header>
 

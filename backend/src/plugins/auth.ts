@@ -87,16 +87,35 @@ async function authPlugin(fastify: FastifyInstance) {
       if (reply.sent) return;
 
       const payload = request.user as JWTPayload;
-      if (!request.tenant || !payload.membership_id || payload.mosque_id !== request.tenant.mosque_id) {
-        reply.status(403).send({ error: 'Access denied for this mosque.' });
+      if (!request.tenant) {
+        reply.status(400).send({ error: 'Tenant context is missing.' });
         return;
       }
 
-      const membership = await fastify.prisma.membership.findUnique({
-        where: { membership_id: payload.membership_id }
+      // 1. Look up existing membership in the active tenant context
+      let membership = await fastify.prisma.membership.findUnique({
+        where: { mosque_id_user_id: { mosque_id: request.tenant.mosque_id, user_id: payload.user_id } }
       });
-      if (!membership || membership.status !== 'Active' || membership.user_id !== payload.user_id || membership.mosque_id !== request.tenant.mosque_id) {
-        reply.status(403).send({ error: 'Your mosque membership is unavailable.' });
+
+      // 2. If no membership exists yet in this active tenant, auto-link worshipper role for general member requests
+      if (!membership) {
+        if (roles.length === 0 || (roles.length === 1 && roles[0] === 'member')) {
+          membership = await fastify.prisma.membership.create({
+            data: {
+              mosque_id: request.tenant.mosque_id,
+              user_id: payload.user_id,
+              role: 'member',
+              status: 'Active'
+            }
+          });
+        } else {
+          reply.status(403).send({ error: 'Access denied for this mosque workspace.' });
+          return;
+        }
+      }
+
+      if (membership.status !== 'Active') {
+        reply.status(403).send({ error: 'Your mosque membership is currently suspended.' });
         return;
       }
 
@@ -104,6 +123,7 @@ async function authPlugin(fastify: FastifyInstance) {
         reply.status(403).send({ error: 'You do not have permission to perform this action.' });
         return;
       }
+
       request.membership = membership;
     };
   });

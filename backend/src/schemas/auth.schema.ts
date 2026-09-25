@@ -34,3 +34,27 @@ export const switchTenantSchema = {
     }
   }
 } as const;
+
+export const forgotPasswordSchema = {
+  body: {
+    type: 'object',
+    required: ['email'],
+    properties: {
+      email: { type: 'string', minLength: 3, maxLength: 255 }
+    },
+    additionalProperties: false
+  }
+} as const;
+
+export const resetPasswordSchema = {
+  body: {
+    type: 'object',
+    required: ['resetToken', 'newPassword'],
+    properties: {
+      resetToken: { type: 'string', minLength: 10 },
+      newPassword: { type: 'string', minLength: 8, maxLength: 128 }
+    },
+    additionalProperties: false
+  }
+} as const;
+

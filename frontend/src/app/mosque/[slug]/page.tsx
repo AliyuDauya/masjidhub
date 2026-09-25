@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api, setToken } from '@/lib/api';
 import NotificationCenter from '@/components/NotificationCenter';
+import BackButton from '@/components/BackButton';
 
 interface Mosque {
   name: string;
@@ -119,6 +120,7 @@ export default function MosquePortal() {
       {/* 80px Glassmorphism Navigation Header */}
       <header className="nav-glass px-8 md:px-12 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
+          <BackButton fallbackUrl="/" />
           <Link href="/" className="text-2xl font-black uppercase tracking-tighter text-[#0d4734] flex items-center gap-3">
             <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
             <span>MASJIDHUB</span>
