@@ -40,7 +40,7 @@ export default function GlobalLoginPage() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+        &copy; 2026 MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );
