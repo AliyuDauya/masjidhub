@@ -235,6 +235,20 @@ export default function MosqueMemberDashboard() {
   const joinedSlugs = new Set(user?.memberships?.map((m) => m.mosque?.slug) || []);
   const availableMosquesToJoin = allMosques.filter((m) => !joinedSlugs.has(m.slug));
 
+  const currentMembership = user?.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
+  const anyAdminMembership = user?.memberships?.find(
+    (m) =>
+      m.status === 'Active' &&
+      ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(m.role)
+  );
+  const activeAdminMembership = currentMembership && ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(currentMembership.role)
+    ? currentMembership
+    : anyAdminMembership;
+
+  const isAdminOrOfficer = Boolean(activeAdminMembership);
+  const adminMosqueSlug = activeAdminMembership?.mosque?.slug || slug;
+  const adminMosqueName = activeAdminMembership?.mosque?.name || mosque?.name || slug;
+
   return (
     <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
       {/* 80px Glassmorphism Navigation Header */}
@@ -252,6 +266,15 @@ export default function MosqueMemberDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          {isAdminOrOfficer && (
+            <Link
+              href={`/mosque/${adminMosqueSlug}/admin`}
+              className="btn-pill-gold py-1.5 px-3.5 text-[9px] tracking-widest font-black flex items-center gap-1.5 shadow-sm"
+            >
+              <span>🕌</span>
+              <span>ADMIN WORKSPACE</span>
+            </Link>
+          )}
           <button
             onClick={loadDashboard}
             title="Refresh Dashboard & Metrics"
@@ -353,6 +376,15 @@ export default function MosqueMemberDashboard() {
               </div>
 
               <div className="flex flex-wrap gap-3">
+                {isAdminOrOfficer && (
+                  <Link
+                    href={`/mosque/${adminMosqueSlug}/admin`}
+                    className="btn-pill-gold py-3 px-6 text-[9px] tracking-ultra-wide whitespace-nowrap border-2 border-[#c89b3c] shadow-lg flex items-center gap-1.5 font-black"
+                  >
+                    <span>🕌</span>
+                    <span>ADMIN WORKSPACE (PRAYERS, NOTICES, ROSTER) &rarr;</span>
+                  </Link>
+                )}
                 <Link
                   href={`/mosque/${slug}/donations`}
                   className="btn-pill-gold py-3 px-6 text-[9px] tracking-ultra-wide whitespace-nowrap"
@@ -373,6 +405,35 @@ export default function MosqueMemberDashboard() {
                 </Link>
               </div>
             </div>
+
+            {/* Admin Guidance Banner */}
+            {isAdminOrOfficer && (
+              <div className="bg-[#0d4734] border-2 border-[#c89b3c] rounded-[14px] p-6 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#c89b3c] animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
+                      ADMINISTRATION PRIVILEGES DETECTED
+                    </span>
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/10 uppercase text-white/90">
+                      {activeAdminMembership?.role.replace('_', ' ')} &bull; {adminMosqueName}
+                    </span>
+                  </div>
+                  <h4 className="text-base font-black uppercase tracking-tight text-white">
+                    Need to change prayer times, post announcements, or manage finances?
+                  </h4>
+                  <p className="text-xs text-[#e4efe9]/80 font-normal">
+                    You are in the worshipper/member view. Open your Mosque Admin Console to manage prayer schedules, community notices, programme rosters, and donations.
+                  </p>
+                </div>
+                <Link
+                  href={`/mosque/${adminMosqueSlug}/admin`}
+                  className="btn-pill-gold py-2.5 px-6 text-[9px] tracking-widest font-black whitespace-nowrap shadow-md shrink-0"
+                >
+                  OPEN ADMIN CONSOLE &rarr;
+                </Link>
+              </div>
+            )}
 
             {/* Message / Error Alerts */}
             {error && (

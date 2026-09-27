@@ -237,6 +237,9 @@ export default function MasjidHubLuxuryLandingPage() {
             <a href="#architecture" className="text-[10px] font-black uppercase tracking-menu text-[#1c2421] hover:text-[#c89b3c] transition-colors">
               ARCHITECTURE
             </a>
+            <Link href="/admin" className="text-[10px] font-black uppercase tracking-menu text-[#0d4734] hover:text-[#c89b3c] transition-colors font-bold">
+              MOSQUE ADMIN
+            </Link>
             <Link href="/platform" className="text-[10px] font-black uppercase tracking-menu text-[#c89b3c] hover:text-[#0d4734] transition-colors font-bold">
               PLATFORM CONSOLE
             </Link>

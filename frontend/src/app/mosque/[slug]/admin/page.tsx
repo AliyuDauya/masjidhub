@@ -216,13 +216,30 @@ export default function MosqueAdmin() {
           if (me.platform_role === 'super_admin') {
             setIsPlatformOperator(true);
           }
-          const tenantMembership = me.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
-          if (tenantMembership) {
-            userRole = tenantMembership.role;
+          const currentMembership = me.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
+          const otherAdminMembership = me.memberships?.find(
+            (m) =>
+              m.status === 'Active' &&
+              m.mosque?.slug !== slug &&
+              ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(m.role)
+          );
+
+          if (currentMembership) {
+            userRole = currentMembership.role;
           }
+
+          // If user is only a member for THIS mosque, but has admin rights in another mosque:
+          if (userRole === 'member' && otherAdminMembership && otherAdminMembership.mosque?.slug) {
+            router.replace(`/mosque/${otherAdminMembership.mosque.slug}/admin`);
+            return;
+          }
+        } else {
+          router.replace(`/login?slug=${slug}`);
+          return;
         }
       } catch {
-        // Fallback default
+        router.replace(`/login?slug=${slug}`);
+        return;
       }
 
       if (typeof window !== 'undefined' && localStorage.getItem('masjidhub:platform:token')) {
@@ -230,7 +247,7 @@ export default function MosqueAdmin() {
       }
 
       if (userRole === 'member') {
-        router.push(`/mosque/${slug}`);
+        router.replace(`/mosque/${slug}/dashboard`);
         return;
       }
       setCurrentRole(userRole);

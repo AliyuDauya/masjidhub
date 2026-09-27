@@ -251,12 +251,59 @@ export default function RoleBasedLoginForm({
           setToken(targetSlug, result.token);
         }
 
-        const destination =
-          activeRole === 'member'
-            ? `/mosque/${targetSlug}/dashboard`
-            : `/mosque/${targetSlug}/admin`;
+        // Check all memberships to route admins and officers to the correct workspace
+        let finalSlug = targetSlug;
+        let isAdminOrOfficer = false;
+        let roleTitle = activeRole === 'member' ? 'Member' : 'Mosque Administrator / Imam';
 
-        const roleTitle = activeRole === 'member' ? 'Member' : 'Mosque Administrator / Imam';
+        try {
+          const profile = await api<{
+            memberships: Array<{
+              role: string;
+              status: string;
+              mosque: { slug: string; name: string };
+            }>;
+          }>(targetSlug, '/api/auth/me');
+
+          if (profile && profile.memberships && profile.memberships.length > 0) {
+            const currentMosqueAdminRole = profile.memberships.find(
+              (m) =>
+                m.mosque?.slug === targetSlug &&
+                m.status === 'Active' &&
+                ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(m.role)
+            );
+
+            const anyAdminRole = profile.memberships.find(
+              (m) =>
+                m.status === 'Active' &&
+                ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(m.role)
+            );
+
+            if (currentMosqueAdminRole) {
+              isAdminOrOfficer = true;
+            } else if (activeRole === 'admin' && anyAdminRole && anyAdminRole.mosque?.slug) {
+              finalSlug = anyAdminRole.mosque.slug;
+              isAdminOrOfficer = true;
+              setToken(finalSlug, result.token);
+            } else if (anyAdminRole && anyAdminRole.mosque?.slug) {
+              isAdminOrOfficer = true;
+              finalSlug = anyAdminRole.mosque.slug;
+              setToken(finalSlug, result.token);
+            }
+          }
+        } catch {
+          // Fall back gracefully
+        }
+
+        const destination =
+          activeRole === 'admin' || isAdminOrOfficer
+            ? `/mosque/${finalSlug}/admin`
+            : `/mosque/${finalSlug}/dashboard`;
+
+        if (isAdminOrOfficer) {
+          roleTitle = 'Mosque Administrator / Officer';
+        }
+
         setSuccessMsg(`Authenticated successfully as ${roleTitle}. Opening your workspace…`);
 
         setTimeout(() => {

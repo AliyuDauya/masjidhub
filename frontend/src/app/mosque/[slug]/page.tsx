@@ -71,9 +71,17 @@ export default function MosquePortal() {
       .catch(() => setCurrentUser(null));
   }, [slug]);
 
-  const isMemberOfCurrentMosque = currentUser?.memberships?.some(
+  const currentMosqueMembership = currentUser?.memberships?.find(
     (m) => m.mosque?.slug === slug && m.status === 'Active'
   );
+  const isAdminOrOfficer = Boolean(
+    currentMosqueMembership &&
+      ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(
+        currentMosqueMembership.role
+      )
+  );
+
+  const isMemberOfCurrentMosque = Boolean(currentMosqueMembership);
 
   async function handleOneClickJoin() {
     if (!currentUser) {
@@ -135,6 +143,15 @@ export default function MosquePortal() {
           <NotificationCenter slug={slug} />
           {currentUser ? (
             <div className="flex items-center gap-3">
+              {isAdminOrOfficer && (
+                <Link
+                  href={`/mosque/${slug}/admin`}
+                  className="btn-pill-gold py-2 px-4 text-[9px] tracking-ultra-wide flex items-center gap-1.5 font-black shadow-sm"
+                >
+                  <span>🕌</span>
+                  <span>ADMIN WORKSPACE</span>
+                </Link>
+              )}
               <Link
                 href={`/mosque/${slug}/dashboard`}
                 className="btn-pill-cta py-2 px-5 text-[9px] tracking-ultra-wide"
