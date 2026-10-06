@@ -11,8 +11,8 @@ interface CreateMosqueBody {
 export default async function mosqueRoutes(fastify: FastifyInstance) {
   fastify.get('/api/mosques', async (_request, reply) => {
     const mosques = await fastify.prisma.mosque.findMany({
-      where: { status: 'Active' },
-      select: { mosque_id: true, name: true, slug: true, address: true, brand_color: true },
+      where: { status: { in: ['Active', 'Pending'] } },
+      select: { mosque_id: true, name: true, slug: true, address: true, brand_color: true, status: true },
       orderBy: { name: 'asc' }
     });
     reply.send(mosques);

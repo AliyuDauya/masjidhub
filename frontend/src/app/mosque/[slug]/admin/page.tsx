@@ -144,7 +144,9 @@ export default function MosqueAdmin() {
   const [currentRole, setCurrentRole] = useState<TenantRole>('tenant_admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
   const [authStatus, setAuthStatus] = useState<'checking' | 'unauthenticated' | 'forbidden' | 'authorized'>('checking');
+  const [mosquePending, setMosquePending] = useState(false);
   const [isPlatformOperator, setIsPlatformOperator] = useState(false);
+  const [allAdminMosques, setAllAdminMosques] = useState<Array<{ slug: string; name: string; role?: string }>>([]);
 
   const [mosque, setMosque] = useState<Mosque | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -207,16 +209,39 @@ export default function MosqueAdmin() {
 
   async function load() {
     setError('');
+    setAuthStatus('checking');
+    setIsPlatformOperator(false);
     try {
-      let userRole: TenantRole = 'tenant_admin';
+      // 1. Attempt to fetch authenticated user — this is the authoritative auth check
+      let me: UserMe | null = null;
       try {
-        const me = await api<UserMe>(slug, '/api/auth/me');
-        if (me && me.user_id) {
-          setCurrentUser({ name: me.name, email: me.email });
-          if (me.platform_role === 'super_admin') {
-            setIsPlatformOperator(true);
-          }
-          const currentMembership = me.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
+        me = await api<UserMe>(slug, '/api/auth/me');
+      } catch (authErr: any) {
+        // 401 = no valid session → redirect to login
+        if (authErr?.status === 401 || authErr?.status === 403) {
+          setAuthStatus('unauthenticated');
+          router.replace(`/login?slug=${slug}`);
+          return;
+        }
+        // Other errors (network, 423 pending, etc.) — still try to load
+      }
+
+      let userRole: TenantRole = 'tenant_admin';
+
+      if (me && me.user_id) {
+        setCurrentUser({ name: me.name, email: me.email });
+        if (me.platform_role === 'super_admin') {
+          setIsPlatformOperator(true);
+          userRole = 'tenant_admin';
+          try {
+            const allMs = await api<Array<{ slug: string; name: string }>>(null, '/api/mosques');
+            if (allMs && Array.isArray(allMs)) {
+              setAllAdminMosques(allMs.map((m) => ({ slug: m.slug, name: m.name, role: 'super_admin' })));
+            }
+          } catch { /* ignored */ }
+        } else {
+          setIsPlatformOperator(false);
+          const tenantMembership = me.memberships?.find((m) => m.mosque?.slug === slug && m.status === 'Active');
           const otherAdminMembership = me.memberships?.find(
             (m) =>
               m.status === 'Active' &&
@@ -224,41 +249,55 @@ export default function MosqueAdmin() {
               ['tenant_admin', 'programme_officer', 'communications_officer', 'finance_officer'].includes(m.role)
           );
 
-          if (currentMembership) {
-            userRole = currentMembership.role;
-          }
-
-          // If user is only a member for THIS mosque, but has admin rights in another mosque:
-          if (userRole === 'member' && otherAdminMembership && otherAdminMembership.mosque?.slug) {
+          if (tenantMembership) {
+            userRole = tenantMembership.role;
+            // If user is only a regular member for THIS mosque, but has admin rights in another mosque:
+            if (userRole === 'member' && otherAdminMembership && otherAdminMembership.mosque?.slug) {
+              router.replace(`/mosque/${otherAdminMembership.mosque.slug}/admin`);
+              return;
+            }
+          } else if (otherAdminMembership && otherAdminMembership.mosque?.slug) {
             router.replace(`/mosque/${otherAdminMembership.mosque.slug}/admin`);
             return;
+          } else if (!me.memberships?.length) {
+            setAuthStatus('unauthenticated');
+            router.replace(`/login?slug=${slug}`);
+            return;
+          } else {
+            setAuthStatus('forbidden');
+            return;
           }
-        } else {
-          router.replace(`/login?slug=${slug}`);
-          return;
+
+          const adminMemberships = me.memberships?.filter((m) => m.status === 'Active' && m.role !== 'member') || [];
+          setAllAdminMosques(adminMemberships.map((m) => ({ slug: m.mosque.slug, name: m.mosque.name, role: m.role })));
         }
-      } catch {
+      } else if (!me) {
+        setAuthStatus('unauthenticated');
         router.replace(`/login?slug=${slug}`);
         return;
       }
 
-      if (typeof window !== 'undefined' && localStorage.getItem('masjidhub:platform:token')) {
-        setIsPlatformOperator(true);
-      }
-
+      // Regular members have no admin access — send to member dashboard
       if (userRole === 'member') {
-        router.replace(`/mosque/${slug}/dashboard`);
+        setAuthStatus('forbidden');
+        router.push(`/mosque/${slug}/dashboard`);
         return;
       }
+
       setCurrentRole(userRole);
+      setAuthStatus('authorized');
 
       const allowed = ROLE_TABS[userRole] || [];
       if (!allowed.some((t) => t.id === tab)) {
         setTab(allowed[0]?.id || 'overview');
       }
 
-      const m = await api<Mosque>(null, `/api/mosques/${slug}`);
-      setMosque(m);
+      // 2. Load mosque info (handles both Active and Pending mosques)
+      try {
+        const m = await api<Mosque & { status?: string }>(null, `/api/mosques/${slug}`);
+        setMosque(m);
+        setMosquePending((m as any).status === 'Pending');
+      } catch { /* ignored */ }
 
       if (userRole === 'tenant_admin' || userRole === 'communications_officer') {
         try {
@@ -301,6 +340,7 @@ export default function MosqueAdmin() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
   }, [slug]);
@@ -599,6 +639,65 @@ export default function MosqueAdmin() {
 
   const navItems = ROLE_TABS[currentRole] || ROLE_TABS.tenant_admin;
 
+  // ── Auth Gates ──────────────────────────────────────────────────────────────
+  if (authStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#fcfbfa] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-[#0d4734] border-t-[#c89b3c] rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-black uppercase tracking-widest text-[#0d4734]">Verifying admin credentials…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <div className="min-h-screen bg-[#fcfbfa] flex items-center justify-center p-6">
+        <div className="bg-white max-w-md w-full p-10 rounded-[20px] border-2 border-[#c89b3c]/30 shadow-2xl text-center space-y-6 animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-[#0d4734] text-[#c89b3c] flex items-center justify-center mx-auto text-2xl">🔒</div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] block mb-1">AUTHENTICATION REQUIRED</span>
+            <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">Admin Sign-In</h2>
+            <p className="text-xs text-[#1c2421]/70 mt-2">You must be signed in as a mosque administrator to access this workspace.</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <Link href={`/mosque/${slug}/login`} className="btn-pill-cta py-3 px-8 text-[10px] tracking-ultra-wide">
+              SIGN IN AS ADMIN →
+            </Link>
+            <Link href={`/mosque/${slug}`} className="btn-pill-secondary py-3 px-8 text-[10px] tracking-ultra-wide">
+              BACK TO MOSQUE PORTAL
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'forbidden') {
+    return (
+      <div className="min-h-screen bg-[#fcfbfa] flex items-center justify-center p-6">
+        <div className="bg-white max-w-md w-full p-10 rounded-[20px] border-2 border-red-200 shadow-2xl text-center space-y-6 animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto text-2xl">🚫</div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-red-600 block mb-1">ACCESS RESTRICTED</span>
+            <h2 className="text-2xl font-black uppercase tracking-tight text-[#0d4734]">Unauthorized Workspace</h2>
+            <p className="text-xs text-[#1c2421]/70 mt-2">You do not have administrative permissions for {mosque?.name || slug}.</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <Link href={`/mosque/${slug}/dashboard`} className="btn-pill-cta py-3 px-8 text-[10px] tracking-ultra-wide">
+              GO TO CONGREGATION DASHBOARD →
+            </Link>
+            <Link href={`/mosque/${slug}`} className="btn-pill-secondary py-3 px-8 text-[10px] tracking-ultra-wide">
+              BACK TO MOSQUE PORTAL
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="relative min-h-screen bg-[#fcfbfa] text-[#1c2421] font-sans selection:bg-[#c89b3c] selection:text-[#0d4734] flex flex-col justify-between">
       {/* Super Admin Persistent Inspection Mode Top Banner */}
@@ -630,10 +729,24 @@ export default function MosqueAdmin() {
             <span className="w-3 h-3 rounded-full bg-[#c89b3c]" />
             <span>MASJIDHUB</span>
           </Link>
-          <span className="text-[#c89b3c]/40">/</span>
-          <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c]">
-            WORKSPACE ({slug})
-          </span>
+          <span className="text-[#c89b3c]/40 hidden sm:inline">/</span>
+          {allAdminMosques.length > 1 ? (
+            <select
+              value={slug}
+              onChange={(e) => router.push(`/mosque/${e.target.value}/admin`)}
+              className="bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-1 px-2 text-[10px] font-black uppercase text-[#0d4734] focus:outline-none cursor-pointer"
+            >
+              {allAdminMosques.map((m) => (
+                <option key={m.slug} value={m.slug}>
+                  🕌 {m.name} ({m.slug})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] hidden sm:inline">
+              WORKSPACE ({slug})
+            </span>
+          )}
           <span className="text-[9px] font-black uppercase tracking-widest bg-[#e4efe9] text-[#0d4734] px-2.5 py-0.5 rounded-full border border-[#0d4734]/20 hidden sm:inline">
             {currentRole.replaceAll('_', ' ')}
           </span>
@@ -658,6 +771,9 @@ export default function MosqueAdmin() {
           <button
             onClick={() => {
               clearToken(slug);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('masjidhub:platform:token');
+              }
               router.push(`/mosque/${slug}`);
             }}
             className="text-[9px] font-black uppercase tracking-widest text-red-600 hover:text-red-800 px-3 py-2"
@@ -697,6 +813,20 @@ export default function MosqueAdmin() {
 
         {/* Workspace Content View */}
         <section className="min-w-0 space-y-6">
+          {/* Pending Mosque Activation Notice */}
+          {mosquePending && (
+            <div className="p-5 bg-amber-50 border-2 border-amber-400 rounded-[12px] flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <span className="text-2xl">⏳</span>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-amber-800">Mosque Activation Pending</p>
+                <p className="text-xs text-amber-700 mt-0.5">Your mosque workspace is pending platform review. You can configure settings and create content, but public-facing features are not live yet. Contact the platform administrator to activate your mosque.</p>
+              </div>
+              <Link href="/platform" className="btn-pill-gold py-2 px-4 text-[9px] whitespace-nowrap">
+                PLATFORM →
+              </Link>
+            </div>
+          )}
+
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-xs font-bold uppercase rounded-[6px]">
               {error}
@@ -1961,7 +2091,7 @@ export default function MosqueAdmin() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+        <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );

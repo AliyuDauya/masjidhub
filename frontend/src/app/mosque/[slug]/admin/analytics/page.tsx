@@ -30,9 +30,14 @@ export default function AdminAnalytics() {
   const [isPlatformOperator, setIsPlatformOperator] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('masjidhub:platform:token')) {
-      setIsPlatformOperator(true);
-    }
+    setIsPlatformOperator(false);
+    api<{ platform_role?: string }>(slug, '/api/auth/me')
+      .then((me) => {
+        if (me && me.platform_role === 'super_admin') {
+          setIsPlatformOperator(true);
+        }
+      })
+      .catch(() => {});
 
     Promise.all([
       api<DonationMetrics>(slug, '/api/admin/analytics/donations'),
@@ -245,7 +250,7 @@ export default function AdminAnalytics() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+        <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );
