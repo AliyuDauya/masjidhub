@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { api, clearToken, setToken, API_URL } from '@/lib/api';
@@ -80,7 +80,13 @@ interface Mosque {
   timezone: string;
 }
 
-export default function MosqueMemberDashboard() {
+const DEFAULT_MOSQUES: Mosque[] = [
+  { mosque_id: 1, name: 'Al-Noor Central Masjid', slug: 'al-noor', timezone: 'Africa/Lagos', brand_color: '#087f5b' },
+  { mosque_id: 2, name: 'Masjid Al-Huda', slug: 'al-huda', timezone: 'Africa/Lagos', brand_color: '#1d4ed8' },
+  { mosque_id: 3, name: 'Al-Iman Islamic Center', slug: 'al-iman', timezone: 'Africa/Lagos', brand_color: '#7c3aed' }
+];
+
+function MosqueMemberDashboardInner() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,7 +102,7 @@ export default function MosqueMemberDashboard() {
   }, [searchParams]);
   const [user, setUser] = useState<UserMe | null>(null);
   const [mosque, setMosque] = useState<Mosque | null>(null);
-  const [allMosques, setAllMosques] = useState<Mosque[]>([]);
+  const [allMosques, setAllMosques] = useState<Mosque[]>(DEFAULT_MOSQUES);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [donations, setDonations] = useState<MemberDonation[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -129,9 +135,11 @@ export default function MosqueMemberDashboard() {
     // 2. Fetch all mosques for directory
     try {
       const ms = await api<Mosque[]>(null, '/api/mosques');
-      setAllMosques(ms || []);
+      if (ms && Array.isArray(ms) && ms.length > 0) {
+        setAllMosques(ms);
+      }
     } catch {
-      setAllMosques([]);
+      // Retain DEFAULT_MOSQUES fallback
     }
 
     // 3. Fetch authenticated member data
@@ -202,10 +210,14 @@ export default function MosqueMemberDashboard() {
     setJoiningSlug(targetSlug);
     setError('');
     try {
+      const currentToken = slug ? getToken(slug) : null;
+      const headers: Record<string, string> = {};
+      if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
       const res = await api<{ success: boolean; message: string; token: string }>(
         targetSlug,
         '/api/members/join',
-        { method: 'POST' }
+        { method: 'POST', headers }
       );
       if (res.token) {
         setToken(targetSlug, res.token);
@@ -246,9 +258,23 @@ export default function MosqueMemberDashboard() {
             <span>MASJIDHUB</span>
           </Link>
           <span className="text-[#c89b3c]/40 hidden sm:inline">/</span>
-          <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] hidden sm:inline">
-            MEMBER DASHBOARD ({slug})
-          </span>
+          {user?.memberships && user.memberships.length > 1 ? (
+            <select
+              value={slug}
+              onChange={(e) => router.push(`/mosque/${e.target.value}/dashboard`)}
+              className="bg-[#f6f3eb] border border-[#c89b3c]/30 rounded-[6px] py-1 px-2 text-[10px] font-black uppercase text-[#0d4734] focus:outline-none cursor-pointer"
+            >
+              {user.memberships.map((m) => (
+                <option key={m.membership_id} value={m.mosque?.slug || slug}>
+                  🏛️ {m.mosque?.name || m.mosque?.slug}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-[10px] font-black uppercase tracking-ultra-wide text-[#c89b3c] hidden sm:inline">
+              MEMBER DASHBOARD ({slug})
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -270,6 +296,9 @@ export default function MosqueMemberDashboard() {
           <button
             onClick={() => {
               clearToken(slug);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('masjidhub:platform:token');
+              }
               router.push(`/mosque/${slug}`);
             }}
             className="btn-pill-secondary py-1.5 px-4 text-[9px] tracking-widest text-red-600 hover:text-red-700"
@@ -1261,8 +1290,23 @@ export default function MosqueMemberDashboard() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+        <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
+  );
+}
+
+export default function MosqueMemberDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fcfbfa] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-[#0d4734] border-t-[#c89b3c] rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-black uppercase tracking-widest text-[#0d4734]">Loading your dashboard…</p>
+        </div>
+      </div>
+    }>
+      <MosqueMemberDashboardInner />
+    </Suspense>
   );
 }

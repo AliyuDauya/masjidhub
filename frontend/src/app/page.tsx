@@ -644,7 +644,7 @@ export default function MasjidHubLuxuryLandingPage() {
           {/* Bottom Bar */}
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
             <div>
-              &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+              <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
             </div>
             <div className="flex gap-8">
               <a href="#" className="hover:text-[#0d4734] transition-colors">Privacy Protocol</a>

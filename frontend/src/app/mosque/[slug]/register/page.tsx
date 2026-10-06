@@ -12,6 +12,12 @@ interface MosqueOption {
   slug: string;
 }
 
+const DEFAULT_MOSQUES: MosqueOption[] = [
+  { mosque_id: 1, name: 'Al-Noor Central Masjid', slug: 'al-noor' },
+  { mosque_id: 2, name: 'Masjid Al-Huda', slug: 'al-huda' },
+  { mosque_id: 3, name: 'Al-Iman Islamic Center', slug: 'al-iman' }
+];
+
 export default function UnifiedRegisterPage() {
   const params = useParams();
   const router = useRouter();
@@ -37,7 +43,7 @@ export default function UnifiedRegisterPage() {
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
-  const [allMosques, setAllMosques] = useState<MosqueOption[]>([]);
+  const [allMosques, setAllMosques] = useState<MosqueOption[]>(DEFAULT_MOSQUES);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +52,9 @@ export default function UnifiedRegisterPage() {
     // Load active mosques for member selection
     api<MosqueOption[]>(null, '/api/mosques')
       .then((data) => {
-        setAllMosques(data || []);
+        if (data && Array.isArray(data) && data.length > 0) {
+          setAllMosques(data);
+        }
       })
       .catch(() => {});
   }, []);
@@ -460,7 +468,7 @@ export default function UnifiedRegisterPage() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
+        <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );

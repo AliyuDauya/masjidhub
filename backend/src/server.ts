@@ -144,7 +144,7 @@ const start = async () => {
   }
 };
 
-// Start the server if this script is executed directly
-if (process.argv[1] && process.argv[1].endsWith('server.ts')) {
+// Start the server if not running inside test runner
+if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
   start();
 }

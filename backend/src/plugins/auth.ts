@@ -52,15 +52,17 @@ async function authPlugin(fastify: FastifyInstance) {
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      let token: string | undefined = request.cookies?.[SESSION_COOKIE_NAME];
-      if (token) {
-        request.authType = 'cookie';
-      } else if (request.headers.authorization) {
+      let token: string | undefined;
+      if (request.headers.authorization) {
         const parts = request.headers.authorization.split(' ');
         if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
           token = parts[1];
           request.authType = 'bearer';
         }
+      }
+      if (!token && request.cookies?.[SESSION_COOKIE_NAME]) {
+        token = request.cookies[SESSION_COOKIE_NAME];
+        request.authType = 'cookie';
       }
 
       if (!token) {

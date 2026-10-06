@@ -43,11 +43,10 @@ export default async function donationRoutes(fastify: FastifyInstance) {
 
     let user_id: number | undefined;
     try {
-      await request.jwtVerify();
+      await fastify.authenticate(request, reply);
       const payload = request.user as JWTPayload;
-      if (payload.mosque_id === request.tenant.mosque_id && payload.membership_id) {
-        const membership = await fastify.prisma.membership.findUnique({ where: { membership_id: payload.membership_id } });
-        if (membership?.status === 'Active') user_id = payload.user_id;
+      if (payload?.user_id) {
+        user_id = payload.user_id;
       }
     } catch { /* anonymous donations are allowed */ }
 
@@ -383,7 +382,7 @@ export default async function donationRoutes(fastify: FastifyInstance) {
 
     let user_id: number | undefined;
     try {
-      await request.jwtVerify();
+      await fastify.authenticate(request, reply);
       const payload = request.user as JWTPayload;
       if (payload.mosque_id === request.tenant.mosque_id && payload.membership_id) {
         const membership = await fastify.prisma.membership.findUnique({ where: { membership_id: payload.membership_id } });

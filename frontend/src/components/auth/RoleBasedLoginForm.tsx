@@ -13,6 +13,7 @@ export interface MosqueOption {
   slug: string;
   address?: string;
   brand_color?: string;
+  status?: string;
 }
 
 export interface RoleBasedLoginFormProps {
@@ -145,6 +146,12 @@ export const ROLE_CONFIGS: Record<PortalRole, RoleConfig> = {
   }
 };
 
+const DEFAULT_MOSQUES: MosqueOption[] = [
+  { mosque_id: 1, name: 'Al-Noor Central Masjid', slug: 'al-noor', status: 'Active' },
+  { mosque_id: 2, name: 'Masjid Al-Huda', slug: 'al-huda', status: 'Active' },
+  { mosque_id: 3, name: 'Al-Iman Islamic Center', slug: 'al-iman', status: 'Active' }
+];
+
 export default function RoleBasedLoginForm({
   initialRole = 'member',
   defaultSlug = 'al-noor',
@@ -158,32 +165,36 @@ export default function RoleBasedLoginForm({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedMosqueSlug, setSelectedMosqueSlug] = useState(defaultSlug);
-  const [allMosques, setAllMosques] = useState<MosqueOption[]>([]);
-  const [resolvedMosqueName, setResolvedMosqueName] = useState(currentMosqueName || '');
+  const [allMosques, setAllMosques] = useState<MosqueOption[]>(DEFAULT_MOSQUES);
+  const [resolvedMosqueName, setResolvedMosqueName] = useState(
+    currentMosqueName || DEFAULT_MOSQUES.find((m) => m.slug === defaultSlug)?.name || ''
+  );
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Load mosques list for dynamic dropdown
+    // Load mosques list for dynamic dropdown (always on mount / defaultSlug change)
     api<MosqueOption[]>(null, '/api/mosques')
       .then((data) => {
-        if (data && Array.isArray(data)) {
+        if (data && Array.isArray(data) && data.length > 0) {
           setAllMosques(data);
-          const found = data.find((m) => m.slug === (selectedMosqueSlug || defaultSlug));
+          const initialSlug = selectedMosqueSlug || defaultSlug;
+          const found = data.find((m) => m.slug === initialSlug);
           if (found) {
             setResolvedMosqueName(found.name);
-          } else if (data.length > 0 && !selectedMosqueSlug) {
+          } else {
             setSelectedMosqueSlug(data[0].slug);
             setResolvedMosqueName(data[0].name);
           }
         }
       })
       .catch(() => {
-        // Fallback gracefully
+        // Fallback gracefully to DEFAULT_MOSQUES
       });
-  }, [defaultSlug, selectedMosqueSlug]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSlug]);
 
   const config = ROLE_CONFIGS[activeRole];
   const effectiveSlug = selectedMosqueSlug || defaultSlug || 'al-noor';
@@ -247,6 +258,9 @@ export default function RoleBasedLoginForm({
           body: JSON.stringify({ email: trimmedEmail, password })
         });
 
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('masjidhub:platform:token');
+        }
         if (result.token) {
           setToken(targetSlug, result.token);
         }
@@ -455,7 +469,7 @@ export default function RoleBasedLoginForm({
                   {allMosques.length > 0 ? (
                     allMosques.map((m) => (
                       <option key={m.slug} value={m.slug}>
-                        {m.name} (/{m.slug})
+                        {m.status === 'Pending' ? '⏳ ' : ''}{m.name} (/{m.slug}){m.status === 'Pending' ? ' — Pending Activation' : ''}
                       </option>
                     ))
                   ) : (

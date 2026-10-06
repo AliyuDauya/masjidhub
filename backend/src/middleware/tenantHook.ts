@@ -16,8 +16,10 @@ export async function tenantHook(request: FastifyRequest, reply: FastifyReply) {
     reply.status(404).send({ error: `Mosque with slug "${slug}" not found.` });
     return;
   }
-  if (mosque.status !== 'Active') {
-    reply.status(423).send({ error: `This mosque is currently ${mosque.status.toLowerCase()}.` });
+  // Allow Pending mosques — admins need to authenticate & manage their workspace
+  // before the platform operator activates them. Only block Suspended tenants.
+  if (mosque.status === 'Suspended') {
+    reply.status(423).send({ error: 'This mosque workspace has been suspended.' });
     return;
   }
   request.tenant = mosque;

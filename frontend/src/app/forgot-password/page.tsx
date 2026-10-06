@@ -155,7 +155,7 @@ export default function ForgotPasswordPage() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-[#c89b3c]/20 bg-[#f6f3eb] text-center text-[9px] font-black uppercase tracking-ultra-wide text-[#1c2421]/40">
-        &copy; {new Date().getFullYear()} MASJIDHUB MULTI-TENANT PLATFORM. ALL RIGHTS RESERVED.
+        <span suppressHydrationWarning> {new Date().getFullYear()}</span> MASJIDHUB MULTI-TENANT PLATFORM. ALL RIGHTS RESERVED.
       </footer>
     </div>
   );

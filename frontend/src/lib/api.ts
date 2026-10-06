@@ -11,14 +11,19 @@ export function tokenKey(slug: string) {
   return `masjidhub:${slug}:token`;
 }
 
-export function getToken(slug: string) {
+export function getToken(slug: string | null) {
   if (typeof window === 'undefined') return null;
-  const specific = localStorage.getItem(tokenKey(slug));
-  if (specific) return specific;
+  if (slug) {
+    const direct = localStorage.getItem(tokenKey(slug));
+    if (direct) return direct;
+  }
+  // Fallback to active token or any stored member token
+  const active = localStorage.getItem('masjidhub:active_token');
+  if (active) return active;
   for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('masjidhub:') && key.endsWith(':token') && !key.includes('platform')) {
-      const val = localStorage.getItem(key);
+    const k = localStorage.key(i);
+    if (k && k.startsWith('masjidhub:') && k.endsWith(':token') && k !== 'masjidhub:platform:token') {
+      const val = localStorage.getItem(k);
       if (val) return val;
     }
   }
@@ -28,14 +33,24 @@ export function getToken(slug: string) {
 export function setToken(slug: string, token: string) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(tokenKey(slug), token);
+    localStorage.setItem('masjidhub:active_token', token);
   }
 }
 
-export function clearToken(slug: string) {
+export function clearToken(slug?: string) {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(tokenKey(slug));
+    if (slug) {
+      localStorage.removeItem(tokenKey(slug));
+    }
+    localStorage.removeItem('masjidhub:active_token');
+    localStorage.removeItem('masjidhub:platform:token');
     localStorage.removeItem('masjidhub:csrf_token');
+    document.cookie = 'mh_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = 'mh_csrf=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
   }
+  try {
+    fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+  } catch {}
 }
 
 export function getCsrfToken(): string | null {
